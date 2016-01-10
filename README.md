@@ -171,7 +171,6 @@ Authorization: Basic {basic_auth}
 1. `200` request was processed successfully.
 2. `400` invalid `username`.
 3. `401` invalid authentication credentials.
-<<<<<<< HEAD
 
 ### Slices
 ---
