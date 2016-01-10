@@ -171,6 +171,7 @@ Authorization: Basic {basic_auth}
 1. `200` request was processed successfully.
 2. `400` invalid `username`.
 3. `401` invalid authentication credentials.
+<<<<<<< HEAD
 
 ### Slices
 ---
@@ -194,3 +195,5 @@ Authorization: Basic {basic_auth}
 1. `200` request was processed successfully.
 2. `400` invalid `username` or `start_time` or `end_time` or `nodes_list`.
 3. `401` invalid authentication credentials.
+=======
+>>>>>>> 8e0766f38ff78a2824bbf022ac922285b4f6f403
