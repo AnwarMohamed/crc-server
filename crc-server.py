@@ -47,23 +47,67 @@ def not_authorized(e):
     return response
 
 
+
 @app.route('/api/v1/vm/<node_name>/status', methods=['GET'])
-def api_vm_status_(node_name):    
-    
-    response = { 'status':'on' }
-    return jsonify(response)
+def api_vm_status(node_name):    
+    abort(400)
 
 @app.route('/api/v1/vm/<node_name>/start', methods=['POST'])
-def api_vm_start_(node_name):        
+def api_vm_start(node_name):        
     abort(400)
 
 @app.route('/api/v1/vm/<node_name>/stop', methods=['POST'])
-def api_vm_stop_(node_name):        
+def api_vm_stop(node_name):        
     abort(400)
 
 @app.route('/api/v1/vm/<node_name>/reset', methods=['POST'])
-def api_vm_reset_(node_name):        
+def api_vm_reset(node_name):        
     abort(400)
+
+
+
+@app.route('/api/v1/image/load', methods=['POST'])
+def api_image_load():        
+    abort(400)
+
+@app.route('/api/v1/image/load/<task_id>', methods=['GET'])
+def api_image_load_status(task_id):        
+    abort(400)
+
+@app.route('/api/v1/image/save', methods=['POST'])
+def api_image_save():        
+    abort(400)
+
+@app.route('/api/v1/image/save/<task_id>', methods=['GET'])
+def api_image_save_status(task_id):        
+    abort(400)
+
+
+
+@app.route('/api/v1/user/', methods=['POST'])
+def api_user_create():        
+    abort(400)
+
+@app.route('/api/v1/user/<username>', methods=['DELETE'])
+def api_user_delete(username):
+    abort(400)
+
+
+
+@app.route('/api/v1/slice/', methods=['POST'])
+def api_slice_create():        
+    abort(400)
+
+
+
+@app.route('/api/v1/experiment/', methods=['POST'])
+def api_experiment_execute():        
+    abort(400)
+
+@app.route('/api/v1/experiment/<exp_id>', methods=['GET'])
+def api_experiment_status(exp_id):        
+    abort(400)
+
 
 
 if __name__ == '__main__':
