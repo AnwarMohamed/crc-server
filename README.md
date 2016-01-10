@@ -141,3 +141,33 @@ Authorization: Basic {basic_auth}
     'error': {true/false}
 }
 ```
+### User Management
+---
+#### Create New User
+```
+POST    /api/v1/user/
+Authorization: Basic {basic_auth}
+{
+    'username': 'username',
+    'password': 'password'    
+}
+```
+1. `username` is the username of the new user.
+2. `password` is the password of the new user.
+
+##### Returns
+1. `200` request was processed successfully.
+2. `400` invalid `username` or `password`.
+3. `401` invalid authentication credentials.
+
+#### Delete User
+```
+DELETE  /api/v1/user/{username}
+Authorization: Basic {basic_auth}
+```
+1. `username` is the username of the user that will be deleted.
+
+##### Returns
+1. `200` request was processed successfully.
+2. `400` invalid `username`.
+3. `401` invalid authentication credentials.
