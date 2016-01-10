@@ -99,6 +99,7 @@ Authorization: Basic {basic_auth}
     'error': {true/false}
 }
 ```
+
 #### Save the images of a given list of nodes
 ```
 POST	/api/v1/image/save
@@ -141,6 +142,7 @@ Authorization: Basic {basic_auth}
     'error': {true/false}
 }
 ```
+
 ### User Management
 ---
 #### Create New User
@@ -194,5 +196,43 @@ Authorization: Basic {basic_auth}
 1. `200` request was processed successfully.
 2. `400` invalid `username` or `start_time` or `end_time` or `nodes_list`.
 3. `401` invalid authentication credentials.
-=======
->>>>>>> 8e0766f38ff78a2824bbf022ac922285b4f6f403
+
+### Experiment Execution
+---
+#### Execute an experiment
+```
+POST    /api/v1/experiment/
+Authorization: Basic {basic_auth}
+{
+    'path': 'experiment_script_path'
+}
+```
+1. `path` is the path of the experiment script.
+
+##### Returns
+1. `400` invalid `path`.
+2. `401` invalid authentication credentials.
+3. `200` request succeeded. The structure below is returned.
+```
+{
+    'exp_id': '{exp_id}'
+}
+```
+
+#### Check experiment status of a given {exp_id}
+```
+GET     /api/v1/experiment/{exp_id}
+Authorization: Basic {basic_auth}
+```
+1. `exp_id` is the experiment id.
+
+##### Returns
+1. `400` invalid `exp_id`.
+2. `401` invalid authentication credentials.
+3. `200` request succeeded. The structure below is returned.
+```
+{
+    'status': '{running/finished}',
+    'log': []
+}
+```
