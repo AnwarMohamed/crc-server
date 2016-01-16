@@ -1,3 +1,3 @@
 ## CRC-Project Backend Service
 
-Kindly refer to [wiki](wiki) for more info
+Kindly refer to [Wiki](/wiki) for more info
