@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from flask import Flask, jsonify, abort
+from flask import Flask, jsonify, abort, request
 from flask.ext.basicauth import BasicAuth
 from flask.ext.mysql import MySQL
 from paramiko.client import SSHClient
 from paramiko import AutoAddPolicy
-
+from subprocess import call
+import threading, os, random, string, portalocker
 
 app = Flask(__name__)
 app.config['BASIC_AUTH_USERNAME'] = 'crc-user'
@@ -65,20 +66,20 @@ def api_vm_status(vm_name):
 
             client = nodes[vm_name[:-1]]['ssh']
             stdin, stdout, stderr = client.exec_command(
-                'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))
-
-            if len(stdout) == 0:
+                'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))                
+            if len(stdout.read()) == 0:
                 return abort(400)
 
             stdin, stdout, stderr = client.exec_command(
                 'VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
 
-            if len(stdout) == 0:
-                jsonify({'status': 'off'})
+            if len(stdout.read()) == 0:
+                return jsonify({'status': 'off'})
             else:
-                jsonify({'status': 'on'})
+                return jsonify({'status': 'on'})
 
-        except:
+        except Exception, err:
+            print err
             abort(500)
 
 
@@ -92,26 +93,28 @@ def vm_start(node_name, vm_name):
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))
 
-    if len(stdout) == 0:
-        return abort(400)
+    if len(stdout.read()) == 0:
+        return None
 
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
 
-    if len(stdout) == 0:
-        client.exec_command('VBoxManage startvm {0}'.format(vm_internal_name)) 
+    if len(stdout.read()) == 0:
+        client.exec_command('VBoxManage startvm {0} --type headless'.format(vm_internal_name)) 
 
 
 @app.route('/api/v1/vm/<vm_name>/start', methods=['POST'])
 def api_vm_start(vm_name):        
     global nodes
     if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
-        abort(400)
+        return abort(400)
     else:
         thread = threading.Thread(
             target=vm_start, 
-            rgs=(vm_name[:-1], vm_name[-1:]))
-        thread.start()        
+            args=(vm_name[:-1], vm_name[-1:]))
+        thread.start()
+
+    return ''
 
 
 def vm_stop(node_name, vm_name):
@@ -124,13 +127,13 @@ def vm_stop(node_name, vm_name):
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))
 
-    if len(stdout) == 0:
-        return abort(400)
+    if len(stdout.read()) == 0:
+        return None
 
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
 
-    if len(stdout) > 0:
+    if len(stdout.read()) > 0:
         client.exec_command('VBoxManage controlvm {0} poweroff soft'.format(vm_internal_name)) 
 
 
@@ -142,8 +145,11 @@ def api_vm_stop(vm_name):
     else:
         thread = threading.Thread(
             target=vm_stop, 
-            rgs=(vm_name[:-1], vm_name[-1:]))
+            args=(vm_name[:-1], vm_name[-1:]))
         thread.start() 
+
+    return ''      
+
 
 def vm_reset(node_name, vm_name):
     global nodes   
@@ -155,14 +161,14 @@ def vm_reset(node_name, vm_name):
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))
 
-    if len(stdout) == 0:
-        return abort(400)
+    if len(stdout.read()) == 0:
+        return None
 
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
 
-    if len(stdout) == 0:
-        client.exec_command('VBoxManage startvm {0}'.format(vm_internal_name)) 
+    if len(stdout.read()) == 0:
+        client.exec_command('VBoxManage startvm {0} --type headless'.format(vm_internal_name)) 
     else:
         client.exec_command('VBoxManage controlvm {0} reset'.format(vm_internal_name))
 
@@ -171,12 +177,14 @@ def vm_reset(node_name, vm_name):
 def api_vm_reset(vm_name):        
     global nodes
     if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
-        abort(400)
+        return abort(400)
     else:
         thread = threading.Thread(
             target=vm_reset, 
-            rgs=(vm_name[:-1], vm_name[-1:]))        
+            args=(vm_name[:-1], vm_name[-1:]))        
         thread.start() 
+
+    return ''
 
 
 @app.route('/api/v1/image/load', methods=['POST'])
@@ -212,14 +220,67 @@ def api_slice_create():
     abort(400)
 
 
+def experiment_execute(exp_id, path):    
+    call(["mkdir", "-p", "experiments/{0}".format(exp_id)])
+    call(["touch", "experiments/{0}/lock".format(exp_id)])
+
+    log_file = open("experiments/{0}/log".format(exp_id), "w+")    
+
+    call(["omf_ec", 
+            "-u" ,"amqp://10.0.0.200", 
+            "exec", 
+            "--oml_uri", "tcp:10.0.0.200:3003", path], stdout=log_file)
+    
+    log_file.close()
+
+    call(["rm", "experiments/{0}/lock".format(exp_id)])
 
 @app.route('/api/v1/experiment/', methods=['POST'])
-def api_experiment_execute():        
-    abort(400)
+def api_experiment_execute(): 
+    
+    json_req = request.get_json(force=True, silent=True)
+
+    if json_req == None or 'path' not in json_req:            
+        return abort(400)
+
+    if os.path.exists(json_req['path']) == False:
+        return abort(400)
+
+    exp_id = ''.join(random.SystemRandom()
+        .choice(string.ascii_uppercase + string.digits) for _ in range(12))
+
+    thread = threading.Thread(
+        target=experiment_execute, 
+        args=(exp_id, json_req['path']))        
+    thread.start()
+
+    return jsonify({'exp_id': exp_id})
+
 
 @app.route('/api/v1/experiment/<exp_id>', methods=['GET'])
-def api_experiment_status(exp_id):        
-    abort(400)
+def api_experiment_status(exp_id):
+
+    log_path = "experiments/{0}/log".format(exp_id)
+    lock_path = "experiments/{0}/lock".format(exp_id)
+
+    if os.path.exists(log_path) == False:
+        return abort(400)
+
+    try:
+        log = []
+
+        if os.path.exists(lock_path) == False:
+            status = 'finished'
+        else:
+            status = 'running'
+
+        with open("experiments/{0}/log".format(exp_id), 'r') as log_file:            
+            for line in log_file:
+                log.append(line.rstrip())
+
+        return jsonify({'status': status, 'log': log})
+    except:
+        abort(400)
 
 
 def start_ssh_pool():
@@ -268,7 +329,8 @@ if __name__ == '__main__':
     app.run(
         host='0.0.0.0', 
         port=7777,
-        debug=False,
+        debug=True,
+        use_reloader=False,
         threaded=True) 
 
     for k,v in nodes.iteritems():
