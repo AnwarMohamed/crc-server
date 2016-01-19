@@ -48,7 +48,11 @@ def not_authorized(e):
     response.status_code = 405
     return response
 
-
+vms_mapping = {
+    'w': 'vm1',
+    'u': 'vm2',
+    'r': 'vm3'
+}
 
 @app.route('/api/v1/vm/<vm_name>/status', methods=['GET'])
 def api_vm_status(vm_name):
@@ -56,13 +60,8 @@ def api_vm_status(vm_name):
     if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
         abort(400)
     else:
-        try:
-            if vm_name[-1:] == 'w':
-                vm_internal_name = ''
-            elif vm_name[-1:] == 'u':
-                vm_internal_name = ''
-            else:
-                vm_internal_name = ''
+        try:            
+            vm_internal_name = vms_mapping[vm_name[-1:]]
 
             client = nodes[vm_name[:-1]]['ssh']
             stdin, stdout, stderr = client.exec_command(
@@ -86,12 +85,7 @@ def api_vm_status(vm_name):
 def vm_start(node_name, vm_name):
     global nodes  
 
-    if vm_name == 'w':
-        vm_internal_name = ''
-    elif vm_name == 'u':
-        vm_internal_name = ''
-    else:
-        vm_internal_name = ''
+    vm_internal_name = vms_mapping[vm_name]
 
     client = nodes[node_name]['ssh']
 
@@ -123,12 +117,7 @@ def api_vm_start(vm_name):
 def vm_stop(node_name, vm_name):
     global nodes   
 
-    if vm_name == 'w':
-        vm_internal_name = ''
-    elif vm_name == 'u':
-        vm_internal_name = ''
-    else:
-        vm_internal_name = ''
+    vm_internal_name = vms_mapping[vm_name]
 
     client = nodes[node_name]['ssh']
 
@@ -159,12 +148,7 @@ def api_vm_stop(vm_name):
 def vm_reset(node_name, vm_name):
     global nodes   
 
-    if vm_name == 'w':
-        vm_internal_name = ''
-    elif vm_name == 'u':
-        vm_internal_name = ''
-    else:
-        vm_internal_name = ''
+    vm_internal_name = vms_mapping[vm_name]
 
     client = nodes[node_name]['ssh']
 
