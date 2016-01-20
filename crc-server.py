@@ -14,12 +14,12 @@ app.config['BASIC_AUTH_PASSWORD'] = 'crc-pass'
 app.config['BASIC_AUTH_FORCE'] = True
 basic_auth = BasicAuth(app)
 
-#mysql = MySQL()
-#app.config['MYSQL_DATABASE_USER'] = 'root'
-#app.config['MYSQL_DATABASE_PASSWORD'] = 'root'
-#app.config['MYSQL_DATABASE_DB'] = 'crc-server'
-#app.config['MYSQL_DATABASE_HOST'] = '127.0.0.1'
-#mysql.init_app(app)
+mysql = MySQL()
+app.config['MYSQL_DATABASE_USER'] = 'root'
+app.config['MYSQL_DATABASE_PASSWORD'] = 'CRC123'
+app.config['MYSQL_DATABASE_DB'] = 'crc-testbed'
+app.config['MYSQL_DATABASE_HOST'] = '127.0.0.1'
+mysql.init_app(app)
 
 @app.errorhandler(404)
 def resource_not_found(e):
@@ -197,8 +197,9 @@ def image_load(name, path, node_list, task_id):
 def api_image_load():
 
     json_req = request.get_json(force=True, silent=True)
+    json_params = ['name', 'path', 'nodes_list']
 
-    if json_req == None or any(param not in json_req for param in ['name', 'path', 'node_list']):            
+    if json_req == None or any(param not in json_req for param in json_params):            
         return abort(400)
 
     if os.path.exists(json_req['path']) == False:
@@ -209,7 +210,7 @@ def api_image_load():
 
     thread = threading.Thread(
         target=image_load, 
-        args=(json_req['name'], json_req['path'], json_req['node_list'], task_id))
+        args=(json_req['name'], json_req['path'], json_req['nodes_list'], task_id))
     thread.start()
 
     return jsonify({'task_id': task_id})
@@ -246,8 +247,9 @@ def image_save(name, path, node_list, task_id):
 def api_image_save():        
 
     json_req = request.get_json(force=True, silent=True)
+    json_params = ['name', 'path', 'nodes_list']
 
-    if json_req == None or any(param not in json_req for param in ['name', 'path', 'node_list']):            
+    if json_req == None or any(param not in json_req for param in json_params):            
         return abort(400)
 
     if os.path.exists(json_req['path']) == False:
@@ -258,7 +260,7 @@ def api_image_save():
 
     thread = threading.Thread(
         target=image_save, 
-        args=(json_req['name'], json_req['path'], json_req['node_list'], task_id))
+        args=(json_req['name'], json_req['path'], json_req['nodes_list'], task_id))
     thread.start()
 
     return jsonify({'task_id': task_id})
@@ -299,7 +301,22 @@ def api_user_delete(username):
 
 @app.route('/api/v1/slice/', methods=['POST'])
 def api_slice_create():        
-    abort(400)
+    
+    json_req = request.get_json(force=True, silent=True)
+    json_params = ['user_name', 'start_time', 'end_time']
+
+    if json_req == None or any(param not in json_req for param in json_params):            
+        return abort(400)
+
+    conn = mysql.connect()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "insert into slices values ('{0}','{1}','{2}') on duplicate key update start_time='{1}', end_time='{2}'"
+        .format(json_req['user_name'], json_req['start_time'], json_req['end_time']))
+    conn.commit()
+
+    return ''
 
 
 def experiment_execute(exp_id, path):    
