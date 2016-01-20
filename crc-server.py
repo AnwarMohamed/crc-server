@@ -187,21 +187,103 @@ def api_vm_reset(vm_name):
     return ''
 
 
+def image_load(name, path, node_list, task_id):    
+    call(["mkdir", "-p", "tasks/"])
+    call(["touch", "tasks/{0}-load.lock".format(task_id)])
+    call(["./omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(task_id)])
+    call(["rm", "tasks/{0}-load.lock".format(task_id)])
+
 @app.route('/api/v1/image/load', methods=['POST'])
-def api_image_load():        
-    abort(400)
+def api_image_load():
+
+    json_req = request.get_json(force=True, silent=True)
+
+    if json_req == None or any(param not in json_req for param in ['name', 'path', 'node_list']):            
+        return abort(400)
+
+    if os.path.exists(json_req['path']) == False:
+        return abort(400)
+
+    task_id = ''.join(random.SystemRandom()
+        .choice(string.ascii_uppercase + string.digits) for _ in range(12))
+
+    thread = threading.Thread(
+        target=image_load, 
+        args=(json_req['name'], json_req['path'], json_req['node_list'], task_id))
+    thread.start()
+
+    return jsonify({'task_id': task_id})
 
 @app.route('/api/v1/image/load/<task_id>', methods=['GET'])
 def api_image_load_status(task_id):        
-    abort(400)
+
+    progress_log = "tasks/{0}-load.progress".format(task_id)
+    error_log = "tasks/{0}-load.error".format(task_id)    
+    
+    if os.path.exists(progress_log) == False:
+        return abort(400)
+
+    progress = 'Not Started'
+    with open(progress_log, 'r') as plog:
+        for line in plog:
+            pass
+        progress = line
+
+    return jsonify({
+        'task_id': task_id,
+        'progress': progress,
+        'error': os.path.exists(error_log)
+    })
+
+
+def image_save(name, path, node_list, task_id):    
+    call(["mkdir", "-p", "tasks/"])
+    call(["touch", "tasks/{0}-save.lock".format(task_id)])
+    call(["./omf_save.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(task_id)])
+    call(["rm", "tasks/{0}-save.lock".format(task_id)])
 
 @app.route('/api/v1/image/save', methods=['POST'])
 def api_image_save():        
-    abort(400)
+
+    json_req = request.get_json(force=True, silent=True)
+
+    if json_req == None or any(param not in json_req for param in ['name', 'path', 'node_list']):            
+        return abort(400)
+
+    if os.path.exists(json_req['path']) == False:
+        return abort(400)
+
+    task_id = ''.join(random.SystemRandom()
+        .choice(string.ascii_uppercase + string.digits) for _ in range(12))
+
+    thread = threading.Thread(
+        target=image_save, 
+        args=(json_req['name'], json_req['path'], json_req['node_list'], task_id))
+    thread.start()
+
+    return jsonify({'task_id': task_id})
+
 
 @app.route('/api/v1/image/save/<task_id>', methods=['GET'])
-def api_image_save_status(task_id):        
-    abort(400)
+def api_image_save_status(task_id):
+
+    progress_log = "tasks/{0}-save.progress".format(task_id)
+    error_log = "tasks/{0}-save.error".format(task_id)    
+    
+    if os.path.exists(progress_log) == False:
+        return abort(400)
+
+    progress = 'Not Started'
+    with open(progress_log, 'r') as plog:
+        for line in plog:
+            pass
+        progress = line
+
+    return jsonify({
+        'task_id': task_id,
+        'progress': progress,
+        'error': os.path.exists(error_log)
+    })
 
 
 
@@ -287,6 +369,7 @@ def start_ssh_pool():
     global nodes
 
     try:
+        print ' * Parsing nodes config file'
         with open("/etc/dnsmasq.d/testbed.conf") as config_file:
             parse_node = False
             for line in config_file:                
@@ -300,14 +383,16 @@ def start_ssh_pool():
                 elif line.startswith('#NODE'):
                     parse_node = True
     except Exception, err:
-        print 'Error parsing nodes config file'
+        print ' x Error parsing nodes config file'
         print err      
         exit(1)
+    finally:
+        print
 
     try:
         for k,v in nodes.iteritems():
-            print 'Setting up a connection with {0}'.format(k)
-            print 'Connecting to {0}'.format(v['ip'])
+            print ' * Setting up a connection with {0}'.format(k)
+            print ' * Connecting to {0}'.format(v['ip'])
 
             client = SSHClient()            
             client.set_missing_host_key_policy(AutoAddPolicy())
@@ -315,15 +400,27 @@ def start_ssh_pool():
 
             nodes[k]['ssh'] = client
 
+            print ' * Connected to {0} @ {1}\n'.format(k, v['ip'])
+
     except Exception, err:
-        print 'Error establishing ssh connection to nodes' 
+        print ' x Error establishing ssh connection to nodes' 
         print err          
         exit(1)
 
 nodes = {}
 
-if __name__ == '__main__':
+def start_logo():
+    print '''
+      __________  ______   ______          __  __             __
+     / ____/ __ \/ ____/  /_  __/__  _____/ /_/ /_  ___  ____/ /
+    / /   / /_/ / /        / / / _ \/ ___/ __/ __ \/ _ \/ __  / 
+   / /___/ _, _/ /___     / / /  __(__  ) /_/ /_/ /  __/ /_/ /  
+   \____/_/ |_|\____/    /_/  \___/____/\__/_.___/\___/\__,_/   
+                                             Backend Service
+    '''
 
+if __name__ == '__main__':
+    start_logo()
     start_ssh_pool()
     
     app.run(
@@ -333,6 +430,8 @@ if __name__ == '__main__':
         use_reloader=False,
         threaded=True) 
 
+    print 
+
     for k,v in nodes.iteritems():
-        print 'Closing connection {0}'.format(k)
+        print ' * Closing connection {0}'.format(k)
         v['ssh'].close
