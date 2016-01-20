@@ -1,8 +1,8 @@
 """
 Add to PAM configuration with:
-  auth    required    pam_python.so pam_crcauth.py
+  account    required    pam_python.so pam_crcauth.py
 
-Requires configuration file, /etc/security/pam_crcauth.conf
+Requires configuration file /etc/security/pam_crcauth.conf
 """
 
 import syslog
