@@ -290,12 +290,25 @@ def api_image_save_status(task_id):
 
 
 @app.route('/api/v1/user/', methods=['POST'])
-def api_user_create():        
-    abort(400)
+def api_user_create():     
 
-@app.route('/api/v1/user/<username>', methods=['DELETE'])
-def api_user_delete(username):
-    abort(400)
+    json_req = request.get_json(force=True, silent=True)
+    json_params = ['username', 'password']
+
+    if json_req == None or any(param not in json_req for param in json_params):            
+        return abort(400)
+
+    call(["./user_add.sh", json_req['username'], json_req['password']])
+
+    return ''
+
+@app.route('/api/v1/user/<user_name>', methods=['DELETE'])
+def api_user_delete(user_name):    
+    
+    FNULL = open(os.devnull, 'w')
+    call(["./user_delete.sh", user_name], stdout=FNULL, stderr=FNULL)
+
+    return ''
 
 
 
@@ -315,6 +328,9 @@ def api_slice_create():
         "insert into slices values ('{0}','{1}','{2}') on duplicate key update start_time='{1}', end_time='{2}'"
         .format(json_req['user_name'], json_req['start_time'], json_req['end_time']))
     conn.commit()
+
+    cursor.close()
+    conn.close()
 
     return ''
 
