@@ -308,8 +308,18 @@ def api_user_delete(user_name):
     FNULL = open(os.devnull, 'w')
     call(["./user_delete.sh", user_name], stdout=FNULL, stderr=FNULL)
 
-    return ''
+    conn = mysql.connect()
+    cursor = conn.cursor()
 
+    cursor.execute(
+        "delete from slices where user_name = {0}"
+        .format(json_req['user_name']))
+    conn.commit()
+
+    cursor.close()
+    conn.close()       
+
+    return ''
 
 
 @app.route('/api/v1/slice/', methods=['POST'])
