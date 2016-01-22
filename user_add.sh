@@ -8,9 +8,10 @@ ret=false
 getent passwd $1 >/dev/null 2>&1 && ret=true
 
 if $ret; then
-    echo "User Exists"
+    echo "User Exists" >/dev/null 2>&1
 else
-    useradd -g crc-users -m $1
+	mkdir -p /home/crc-users/$1 
+    useradd -g crc-users -m -s /bin/bash -d /home/crc-users/$1  $1
     echo "$2:$1" | chpasswd
 
 fi
