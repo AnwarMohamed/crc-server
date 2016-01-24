@@ -12,5 +12,5 @@ if $ret; then
 else
     mkdir -p /home/crc-users/$1 
     useradd -g crc-users -m -s /bin/bash -d /home/crc-users/$1  $1
-    echo "$2:$1" | chpasswd
+    echo "$1:$2" | chpasswd
 fi
