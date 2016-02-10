@@ -7,12 +7,13 @@ from paramiko.client import SSHClient
 from paramiko import AutoAddPolicy
 from subprocess import call
 import threading, os, random, string, portalocker
+import time
 
 app = Flask(__name__)
-app.config['BASIC_AUTH_USERNAME'] = 'crc-user'
-app.config['BASIC_AUTH_PASSWORD'] = 'crc-pass'
-app.config['BASIC_AUTH_FORCE'] = True
-basic_auth = BasicAuth(app)
+#app.config['BASIC_AUTH_USERNAME'] = 'crc-user'
+#app.config['BASIC_AUTH_PASSWORD'] = 'crc-pass'
+#app.config['BASIC_AUTH_FORCE'] = True
+#basic_auth = BasicAuth(app)
 
 mysql = MySQL()
 app.config['MYSQL_DATABASE_USER'] = 'root'
@@ -181,6 +182,60 @@ def api_vm_reset(vm_name):
     else:
         thread = threading.Thread(
             target=vm_reset, 
+            args=(vm_name[:-1], vm_name[-1:]))        
+        thread.start() 
+
+    return ''
+
+
+def vm_reset2(node_name, vm_name):
+    global nodes   
+
+    vm_internal_name = vms_mapping[vm_name]
+
+    client = nodes[node_name]['ssh']
+
+    stdin, stdout, stderr = client.exec_command(
+        'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))
+
+    if len(stdout.read()) == 0:
+        return None
+
+    stdin, stdout, stderr = client.exec_command(
+        'VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
+
+    if len(stdout.read()) == 0:
+        client.exec_command('VBoxManage startvm {0} --type headless'.format(vm_internal_name)) 
+    else:
+        client.exec_command('VBoxManage controlvm {0} acpipowerbutton'.format(vm_internal_name))
+        print "Issued ACPI shutdown"
+        stdin, stdout, stderr = client.exec_command('VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
+        
+        n_attempts=0 
+        while len(stdout.read()) != 0:
+            time.sleep(1)
+            print "Checking if node is off"
+            stdin, stdout, stderr = client.exec_command('VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
+            if n_attempts>=10:
+                print "Forcing shutdown"
+                client.exec_command('VBoxManage controlvm {0} poweroff'.format(vm_internal_name)) 
+                break
+            
+            n_attempts= n_attempts + 1
+        print "Node is off waiting 3 seconds"
+ 	time.sleep(3)
+        print "Starting node"
+        client.exec_command('VBoxManage startvm {0} --type headless'.format(vm_internal_name)) 
+
+
+@app.route('/api/v1/vm/<vm_name>/reset2', methods=['POST'])
+def api_vm_reset2(vm_name):        
+    global nodes
+    if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
+        return abort(400)
+    else:
+        thread = threading.Thread(
+            target=vm_reset2, 
             args=(vm_name[:-1], vm_name[-1:]))        
         thread.start() 
 
