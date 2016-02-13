@@ -1,13 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+import logging
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',
+    filename='/var/log/crc-service.log',
+    level=logging.DEBUG, 
+    datefmt='%Y-%m-%d %H:%M:%S')
+
 from flask import Flask, jsonify, abort, request
 from flask.ext.basicauth import BasicAuth
 from flask.ext.mysql import MySQL
 from paramiko.client import SSHClient
 from paramiko import AutoAddPolicy
-from subprocess import call
-import threading, os, random, string, portalocker
-import time
+from subprocess import call,Popen
+import threading, os, random, string, portalocker , signal,base64
+import time, thread
+from decorators import *
 
 app = Flask(__name__)
 #app.config['BASIC_AUTH_USERNAME'] = 'crc-user'
@@ -57,6 +66,7 @@ vms_mapping = {
 }
 
 @app.route('/api/v1/vm/<vm_name>/status', methods=['GET'])
+@crossdomain(origin='*')
 def api_vm_status(vm_name):
     global nodes
     if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
@@ -105,6 +115,7 @@ def vm_start(node_name, vm_name):
 
 
 @app.route('/api/v1/vm/<vm_name>/start', methods=['POST'])
+@crossdomain(origin='*')
 def api_vm_start(vm_name):        
     global nodes
     if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
@@ -139,6 +150,7 @@ def vm_stop(node_name, vm_name):
 
 
 @app.route('/api/v1/vm/<vm_name>/stop', methods=['POST'])
+@crossdomain(origin='*')
 def api_vm_stop(vm_name):        
     global nodes
     if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
@@ -229,6 +241,7 @@ def vm_reset2(node_name, vm_name):
 
 
 @app.route('/api/v1/vm/<vm_name>/reset2', methods=['POST'])
+@crossdomain(origin='*')
 def api_vm_reset2(vm_name):        
     global nodes
     if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
@@ -242,17 +255,26 @@ def api_vm_reset2(vm_name):
     return ''
 
 
-def image_load(name, path, node_list, task_id):    
-    call(["mkdir", "-p", "tasks/"])
-    call(["touch", "tasks/{0}-load.lock".format(task_id)])
-    call(["./omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(task_id)])
-    call(["rm", "tasks/{0}-load.lock".format(task_id)])
+def image_load(name, path, node_list, task_id_list):   
+    for task_id in task_id_list:
+        call(["rm", "-rf", "tasks/{0}-load.progress".format(task_id)])  
+        print(" ".join(["rm", "-rf", "tasks/{0}-load.progress".format(task_id)])) 
+        call(["rm", "-rf", "tasks/{0}-load.lock".format(task_id)]) 
+        call(["rm", "-rf", "tasks/{0}-load.error".format(task_id)]) 
+        call(["mkdir", "-p", "tasks/"])
+        call(["touch", "tasks/{0}-load.lock".format(task_id)])
+        call(["touch", "tasks/{0}-load.progress".format(task_id)])
+
+    print " ".join(["./omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
+    call(["./omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
+    for task_id in task_id_list:
+        call(["rm", "tasks/{0}-load.lock".format(task_id)])
 
 @app.route('/api/v1/image/load', methods=['POST'])
 def api_image_load():
 
     json_req = request.get_json(force=True, silent=True)
-    json_params = ['name', 'path', 'nodes_list']
+    json_params = ['name', 'path', 'nodes_list', 'task_id']
 
     if json_req == None or any(param not in json_req for param in json_params):            
         return abort(400)
@@ -260,49 +282,60 @@ def api_image_load():
     if os.path.exists(json_req['path']) == False:
         return abort(400)
 
-    task_id = ''.join(random.SystemRandom()
-        .choice(string.ascii_uppercase + string.digits) for _ in range(12))
-
     thread = threading.Thread(
         target=image_load, 
-        args=(json_req['name'], json_req['path'], json_req['nodes_list'], task_id))
+        args=(json_req['name'], json_req['path'], json_req['nodes_list'], json_req['task_id']))
     thread.start()
 
-    return jsonify({'task_id': task_id})
+    return jsonify({'task_id': json_req['task_id']})
 
+last_progress="0"
 @app.route('/api/v1/image/load/<task_id>', methods=['GET'])
 def api_image_load_status(task_id):        
 
     progress_log = "tasks/{0}-load.progress".format(task_id)
     error_log = "tasks/{0}-load.error".format(task_id)    
+    lock_path = "tasks/{0}-load.lock".format(task_id)
     
     if os.path.exists(progress_log) == False:
         return abort(400)
+    global last_progress
+    if os.stat(progress_log).st_size > 0:
+        progress = last_progress
+        with open(progress_log, 'r') as plog:
+          for line in plog:
+             pass
+          line_split=line.split(" ")
+          if len(line_split)>=2:
+             progress_perc = line.split(" ")[1]
+             if progress_perc[-1] == '%':
+                  progress=progress_perc[:-1] 
+                  last_progress = progress   
+    else:
+        progress="0"
+        last_progress="0"  
 
-    progress = 'Not Started'
-    with open(progress_log, 'r') as plog:
-        for line in plog:
-            pass
-        progress = line
 
     return jsonify({
         'task_id': task_id,
         'progress': progress,
-        'error': os.path.exists(error_log)
+        'error': os.path.exists(error_log),
+        'done': not os.path.exists(lock_path)
     })
 
 
 def image_save(name, path, node_list, task_id):    
+    call(["rm", "-rf", "tasks/{0}-save.*".format(task_id)])
     call(["mkdir", "-p", "tasks/"])
     call(["touch", "tasks/{0}-save.lock".format(task_id)])
     call(["./omf_save.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(task_id)])
-    call(["rm", "tasks/{0}-save.lock".format(task_id)])
+    call(["rm", "-rf", "tasks/{0}-save.lock".format(task_id)])
 
 @app.route('/api/v1/image/save', methods=['POST'])
 def api_image_save():        
 
     json_req = request.get_json(force=True, silent=True)
-    json_params = ['name', 'path', 'nodes_list']
+    json_params = ['name', 'path', 'nodes_list', 'task_id']
 
     if json_req == None or any(param not in json_req for param in json_params):            
         return abort(400)
@@ -310,15 +343,12 @@ def api_image_save():
     if os.path.exists(json_req['path']) == False:
         return abort(400)
 
-    task_id = ''.join(random.SystemRandom()
-        .choice(string.ascii_uppercase + string.digits) for _ in range(12))
-
     thread = threading.Thread(
         target=image_save, 
-        args=(json_req['name'], json_req['path'], json_req['nodes_list'], task_id))
+        args=(json_req['name'], json_req['path'], json_req['nodes_list'], json_req['task_id']))
     thread.start()
 
-    return jsonify({'task_id': task_id})
+    return jsonify({'task_id': json_req['task_id']})
 
 
 @app.route('/api/v1/image/save/<task_id>', methods=['GET'])
@@ -326,6 +356,7 @@ def api_image_save_status(task_id):
 
     progress_log = "tasks/{0}-save.progress".format(task_id)
     error_log = "tasks/{0}-save.error".format(task_id)    
+    lock_path = "tasks/{0}-save.lock".format(task_id)
     
     if os.path.exists(progress_log) == False:
         return abort(400)
@@ -339,12 +370,14 @@ def api_image_save_status(task_id):
     return jsonify({
         'task_id': task_id,
         'progress': progress,
-        'error': os.path.exists(error_log)
+        'error': os.path.exists(error_log),
+        'done': not os.path.exists(lock_path)
     })
 
 
 
 @app.route('/api/v1/user/', methods=['POST'])
+@crossdomain(origin='*')
 def api_user_create():     
 
     json_req = request.get_json(force=True, silent=True)
@@ -400,48 +433,69 @@ def api_slice_create():
     return ''
 
 
-def experiment_execute(exp_id, path):    
-    call(["mkdir", "-p", "experiments/{0}".format(exp_id)])
-    call(["touch", "experiments/{0}/lock".format(exp_id)])
+def experiment_execute(exp_id, script,username):
+    call(["rm", "-rf", "experiments/{0}.*".format(exp_id)])
+    call(["touch", "experiments/{0}.lock".format(exp_id)])
+    call(["mkdir", "-p", "/home/crc-users/{0}/scripts".format(username)])  
+    log_file = open("experiments/{0}.log".format(exp_id), "w+") 
 
-    log_file = open("experiments/{0}/log".format(exp_id), "w+")    
+    with open("/home/crc-users/{0}/scripts/{1}".format(username, exp_id), 'w') as file_:
+        file_.write(base64.b64decode(script))
 
-    call(["omf_ec", 
-            "-u" ,"amqp://10.0.0.200", 
-            "exec", 
-            "--oml_uri", "tcp:10.0.0.200:3003", path], stdout=log_file)
-    
+    #call(["omf_ec", "-u" ,"amqp://10.0.0.200",  "exec",  "--oml_uri", "tcp:10.0.0.200:3003", path,"& ", "echo", "$!", ">", "experiments/{0}.pid".format(exp_id)], stdout=log_file)
+
+    p=Popen(["omf_ec", "-u" ,"amqp://10.0.0.200",  "exec",  "--oml_uri", "tcp:10.0.0.200:3003", "/home/crc-users/{0}/scripts/{1}".format(username, exp_id)], stdout=log_file)
+    with open("experiments/{0}.pid".format(exp_id), "w") as pid_file:
+        pid_file.write(format(p.pid))	             
+    p.wait()
+
     log_file.close()
 
-    call(["rm", "experiments/{0}/lock".format(exp_id)])
+    call(["rm", "-rf", "experiments/{0}.lock".format(exp_id)])
 
 @app.route('/api/v1/experiment/', methods=['POST'])
 def api_experiment_execute(): 
     
     json_req = request.get_json(force=True, silent=True)
 
-    if json_req == None or 'path' not in json_req:            
-        return abort(400)
-
-    if os.path.exists(json_req['path']) == False:
-        return abort(400)
+    if json_req == None or 'script' not in json_req or 'username' not in json_req:
+        return abort(400)            
 
     exp_id = ''.join(random.SystemRandom()
         .choice(string.ascii_uppercase + string.digits) for _ in range(12))
 
     thread = threading.Thread(
         target=experiment_execute, 
-        args=(exp_id, json_req['path']))        
+        args=(exp_id, json_req['script'], json_req['username']))        
     thread.start()
 
     return jsonify({'exp_id': exp_id})
 
 
+@app.route('/api/v1/experiment/<exp_id>', methods=['DELETE'])
+@crossdomain(origin='*')
+def api_experiment_delete(exp_id):
+    
+    pid_path = "experiments/{0}.pid".format(exp_id)
+
+    if os.path.exists(pid_path) == False:
+        return abort(400)
+
+    try:                
+        #call(["cat", "experiments/{0}.pid".format(exp_id), "|","xargs", "kill", "-9"])
+        with open("experiments/{0}.pid".format(exp_id), 'r') as pid_file:
+           pid=int(pid_file.readline().rstrip('\n'))
+        os.kill(pid, signal.SIGTERM)
+        return ''
+    except:
+        return abort(400)
+
+
 @app.route('/api/v1/experiment/<exp_id>', methods=['GET'])
 def api_experiment_status(exp_id):
 
-    log_path = "experiments/{0}/log".format(exp_id)
-    lock_path = "experiments/{0}/lock".format(exp_id)
+    log_path = "experiments/{0}.log".format(exp_id)
+    lock_path = "experiments/{0}.lock".format(exp_id)
 
     if os.path.exists(log_path) == False:
         return abort(400)
@@ -454,14 +508,37 @@ def api_experiment_status(exp_id):
         else:
             status = 'running'
 
-        with open("experiments/{0}/log".format(exp_id), 'r') as log_file:            
+        with open("experiments/{0}.log".format(exp_id), 'r') as log_file:            
             for line in log_file:
                 log.append(line.rstrip())
 
-        return jsonify({'status': status, 'log': log})
+        return jsonify({
+            'status': status, 
+            'log': log,
+            'done': not os.path.exists(lock_path)
+            })
     except:
         abort(400)
 
+
+def start_ssh_monitor():
+    pass
+
+def check_ssh_alive(client):
+    if client.get_transport() != None and client.get_transport().is_active():
+        return True
+    else:
+        return False
+
+def connect_ssh(client, ip, node):
+    try:
+        client.connect(ip, username='node5', password='crc123')
+        print ' * Connected to {0} @ {1}\n'.format(node, ip)
+    except Exception, e:
+        print ' * Failed to connect to {0} @ {1}\n'.format(node, ip)
+
+        time.sleep(30)
+        connect_ssh(client, ip)
 
 def start_ssh_pool():
     global nodes
@@ -494,11 +571,10 @@ def start_ssh_pool():
 
             client = SSHClient()            
             client.set_missing_host_key_policy(AutoAddPolicy())
-            client.connect(v['ip'], username='node5', password='crc123')
 
-            nodes[k]['ssh'] = client
+            thread.start_new_thread(connect_ssh, (client, v['ip'], k))
 
-            print ' * Connected to {0} @ {1}\n'.format(k, v['ip'])
+            nodes[k]['ssh'] = client        
 
     except Exception, err:
         print ' x Error establishing ssh connection to nodes' 
@@ -520,6 +596,7 @@ def start_logo():
 if __name__ == '__main__':
     start_logo()
     start_ssh_pool()
+    start_ssh_monitor()
     
     app.run(
         host='0.0.0.0', 
@@ -530,6 +607,7 @@ if __name__ == '__main__':
 
     print 
 
-    for k,v in nodes.iteritems():
-        print ' * Closing connection {0}'.format(k)
-        v['ssh'].close
+    for k,v in nodes.iteritems():        
+        if check_ssh_alive(v['ssh']):
+            print ' * Closing connection {0}'.format(k)            
+            v['ssh'].close
