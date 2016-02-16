@@ -41,6 +41,23 @@ PXELINK=$PXEDIR/01-`echo "$MACADDR" | sed 's/:/-/g'`
 echo "[`date`] INFO: OMF Save Preparation phase finished" >> $LOG
 echo "[`date`] INFO: Image on $NODE will be saved to the storage server with name $IMAGENAME" >> $LOG
 echo "[`date`] INFO: Image Saving starts" >> $PROGRESS
+echo "[`date`] INFO: Creating symbolic link with name $MACADDR" >> $LOG
+sudo rm -rf $PXELINK
+sudo ln -sv $PXECONF $PXELINK
+echo "[`date`] INFO: Restarting $NODE" >> $LOG
+echo "[`date`] INFO: after expected line" >> $LOG
+	RETURN=$(curl --write-out %{http_code} --write-out %{http_code} --silent --output /dev/null -data=""  http://193.227.16.154:7777/api/v1/vm/$NODE/reset2)
+	if [ "$RETURN" -ne 200 ] ; then
+		echo "Restart from VM failed! Try to access the node itself"
+		ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null crc@$IPADDR \
+        		"sudo -S shutdown -r now"
+	fi
+RETURN=$?
+if [ "$RETURN" -ne 0 ] ; then
+	echo "Error Can't ssh on $NODE to restart ubuntu" >> $CLIENT_LOG
+	echo "ERROR: Cannot access $NODE to restart" >> $ERROR
+fi
+sleep 60
 #Check that this node is ON and reachable
 #==============================================
 RES=`ping -c 1 -t 10 $IPADDR ; echo $?`
@@ -57,18 +74,6 @@ else
   exit -1
 fi
 #==============================================
-echo "[`date`] INFO: Creating symbolic link with name $MACADDR" >> $LOG
-sudo rm -rf $PXELINK
-sudo ln -sv $PXECONF $PXELINK
-echo "[`date`] INFO: Restarting $NODE" >> $LOG
-echo "[`date`] INFO: after expected line" >> $LOG
-sshpass -p crc123 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null node5@$IPADDR \
-        "echo crc123 | sudo -S shutdown -r now"
-RETURN=$?
-if [ "$RETURN" -ne 0 ] ; then
-	echo "Error Can't ssh on $NODE to restart ubuntu" >> $CLIENT_LOG
-	echo "ERROR: Cannot access $NODE to restart" >> $ERROR
-fi
 echo "[`date`] INFO: Starting imagezip on $NODE after 30 seconds" >> $PROGRESS
 sleep 30 #This value may be smaller
 echo "[`date`] INFO: Starting imagezip on $NODE" >> $LOG
@@ -81,6 +86,7 @@ if [ "$RETURN" -ne 0 ] ; then
 	echo "ERROR: Cannot save image on $NODE" >> $ERROR
 	echo "Error Can't ssh on $NODE to run imagezip on it" >> $CLIENT_LOG
 fi
+sudo rm -rf $PXELINK #To restart on ubuntu the next time, we have to remove the PXE symbolic link
 echo "[`date`] INFO: Image of $NODE is saved with name ${IMAGENAME}_$NODE on storage server" >> $LOG
 echo "imagezip is done"
 echo "Save DONE!" >> $PROGRESS

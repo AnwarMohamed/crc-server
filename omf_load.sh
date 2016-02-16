@@ -33,13 +33,18 @@ function client_excute {
 		exit -1
   	fi
 	echo "[`date`] INFO: Restarting ${NODES[$2]}" >> $LOG
-	sshpass -p $COREPASS ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $COREUSER@$1 "reboot"
-	RETURN=$?
-	if [ "$RETURN" -ne 0 ] ; then
-		echo "Error Can't ssh on ${NODES[$2]} to reboot on tiny core" >> $CLIENT_LOG
-		#echo "ERROR: Cannot access ${NODES[$2]} to restart to Ubuntu" >> $ERROR
-		#exit -1
-  	fi
+	RETURN=$(curl --write-out %{http_code} --write-out %{http_code} --silent --output /dev/null -data=""  http://193.227.16.154:7777/api/v1/vm/${NODES[$2]}/reset2)
+	if [ "$RETURN" -ne 200 ] ; then
+		echo "Restart from VM failed! Try to access the node itself"
+		sshpass -p $COREPASS ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $COREUSER@$1 "reboot"
+		RETURN=$?
+		if [ "$RETURN" -ne 0 ] ; then
+			echo "Error Can't ssh on ${NODES[$2]} to reboot on tiny core" >> $CLIENT_LOG
+			#echo "ERROR: Cannot access ${NODES[$2]} to restart to Ubuntu" >> $ERROR
+			#exit -1
+	  	fi
+	fi
+
 	echo "[`date`] INFO: Load process is finished. Congratulations! \n please wait for 1 minute" >> $LOG
 	#echo "Load DONE for ${NODES[$2]}!" >> $PROGRESS
 	echo "" >> $PROGRESS
@@ -51,8 +56,12 @@ function restart_ubuntu {
 #First time to use the file, overwrite
 	echo "" > $CLIENT_LOG
 	sudo ln -sv $PXECONF ${PXELINKS[$2]}
-	sshpass -p crc123 ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no node5@$1 \
-	        "echo crc123 | sudo -S shutdown -r now"
+	RETURN=$(curl --write-out %{http_code} --write-out %{http_code} --silent --output /dev/null -data=""  http://193.227.16.154:7777/api/v1/vm/${NODES[$2]}/reset2)
+	if [ "$RETURN" -ne 200 ] ; then
+		echo "Restart from VM failed! Try to access the node itself in restart ubuntu"
+		ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no crc@$1 \
+		        "sudo -S shutdown -r now"
+	fi
 }
 
 ################################################################
@@ -98,7 +107,7 @@ fi
 
 
 for i in "${IDS[@]}"; do
-	echo -n "0%" >> "tasks/$i-load.progress"
+	echo -n "t 0%" >> "tasks/$i-load.progress"
 done
 
 NODES_STR=$1        # comma separated string of nodes on which we need to load images
@@ -135,29 +144,6 @@ done
 
 echo "[`date`] INFO: OMF Load Preparation phase finished" >> $LOG
 echo "[`date`] INFO: Image $IMAGENAME will be loaded on $NODES_STR" >> $LOG
-#Check that this node is ON and reachable
-#If one node is not working, the whole script stops
-#==============================================
-INDEX=0
-for i in "${IPADDRS[@]}"; do
-	RES=`ping -c 1 -t 10 $i ; echo $?`
-	ii=$((${#RES}-1))
-	LAST=${RES:$ii:1}
-	if [ $LAST == "0" ];
-	then
-	  echo "${NODES[$INDEX]} is running and reachable"
-	  echo "[`date`] INFO: ${NODES[$INDEX]} is running and reachable" >> $LOG
-	else
-	  echo "${NODES[$INDEX]} is unreachable. Check that it is ON and connected properly to the network"
-	  echo "[`date`] INFO: ${NODES[$INDEX]} is unreachable. Check that it is ON and connected properly to the network" >> $LOG
-	for i in "${IDS[@]}"; do
-    		echo "ERROR: ${NODES[$INDEX]} is unreachable on the network" >> "tasks/$i-load.error"
-	done
-	  exit -1
-	fi
-	INDEX=$INDEX+1
-done
-#==============================================
 #------------------------------Determine the port number-----------------------------------------
 FLOOR=1024
 CEIL=49151
@@ -185,8 +171,29 @@ for i in "${IPADDRS[@]}"; do				#
 done							#
 #########################################################
 sleep 60
-#echo CRC123 | sudo -S ./frisbeed -W 5000000000 -i 10.0.0.200 -p $PORT -m $MADDR $STORAGEDIRECTORY/$IMAGENAME &
 #./frisbeed -W 5000000000 -i 10.0.0.200 -p $PORT -m $MADDR $STORAGEDIRECTORY/$IMAGENAME &
+#Check that this node is ON and reachable
+#If one node is not working, the whole script stops
+#==============================================
+INDEX=0
+for i in "${IPADDRS[@]}"; do
+	RES=`ping -c 1 -t 10 $i ; echo $?`
+	ii=$((${#RES}-1))
+	LAST=${RES:$ii:1}
+	if [ $LAST == "0" ];
+	then
+	  echo "${NODES[$INDEX]} is running and reachable"
+	  echo "[`date`] INFO: ${NODES[$INDEX]} is running and reachable" >> $LOG
+	else
+	  echo "${NODES[$INDEX]} is unreachable. Check that it is ON and connected properly to the network"
+	  echo "[`date`] INFO: ${NODES[$INDEX]} is unreachable. Check that it is ON and connected properly to the network" >> $LOG
+    	  echo "ERROR: ${NODES[$INDEX]} is unreachable on the network" >> "tasks/${IDS[$INDEX]}-load.error"
+	  exit -1
+	fi
+	INDEX=$INDEX+1
+done
+#==============================================
+
 ./frisbeed -W 5000000000 -i 10.0.0.200 -p $PORT -m $MADDR $IMAGENAME &
 FRISBEED_PID=$!
 # We have to open aonther thread here (so, we put &)
