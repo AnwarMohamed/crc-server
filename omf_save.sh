@@ -51,13 +51,21 @@ echo "[`date`] INFO: after expected line" >> $LOG
 		echo "Restart from VM failed! Try to access the node itself"
 		ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null crc@$IPADDR \
         		"sudo -S shutdown -r now"
+		RETURN=$?
+		if [ "$RETURN" -ne 0 ] ; then
+		  echo "Error Can't ssh on $NODE to restart ubuntu" >> $CLIENT_LOG
+		  echo "ERROR: Cannot access $NODE to restart" >> $ERROR
+		fi
 	fi
-RETURN=$?
-if [ "$RETURN" -ne 0 ] ; then
-	echo "Error Can't ssh on $NODE to restart ubuntu" >> $CLIENT_LOG
-	echo "ERROR: Cannot access $NODE to restart" >> $ERROR
-fi
-sleep 60
+sleep 15
+response=$(nc -zv $NODE 22; echo $?)
+while [[ "$response" -ne 0 ]]
+do 
+  echo "Response is $response#################################"
+  echo "Waiting for 1 second for $NODE to restart....."
+  sleep 1
+  response=$(nc -zv $NODE 22; echo $?) #0: succeeded, 1: not
+done
 #Check that this node is ON and reachable
 #==============================================
 RES=`ping -c 1 -t 10 $IPADDR ; echo $?`
@@ -74,8 +82,8 @@ else
   exit -1
 fi
 #==============================================
-echo "[`date`] INFO: Starting imagezip on $NODE after 30 seconds" >> $PROGRESS
-sleep 30 #This value may be smaller
+#echo "[`date`] INFO: Starting imagezip on $NODE after 10 seconds" >> $PROGRESS
+#sleep 10 
 echo "[`date`] INFO: Starting imagezip on $NODE" >> $LOG
 echo "imagezip is starting..."
 #TODO: Check if imagezip produces some errors which are required to be passed to the error file!

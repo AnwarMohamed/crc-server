@@ -170,7 +170,17 @@ for i in "${IPADDRS[@]}"; do				#
 	INDEX=$INDEX+1					#
 done							#
 #########################################################
-sleep 60
+sleep 15
+for i in "${IPADDRS[@]}"; do
+	response=$(nc -zv $i 22; echo $?)
+	while [[ "$response" -ne 0 ]]
+	do 
+	  echo "Waiting for 1 second for $i to restart....."
+	  sleep 1
+	  response=$(nc -zv $i 22; echo $?) #0: succeeded, 1: not
+	done
+done
+
 #./frisbeed -W 5000000000 -i 10.0.0.200 -p $PORT -m $MADDR $STORAGEDIRECTORY/$IMAGENAME &
 #Check that this node is ON and reachable
 #If one node is not working, the whole script stops
