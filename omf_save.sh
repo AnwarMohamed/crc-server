@@ -5,11 +5,11 @@ LOG="Frisbee.log"
 #########################################
 #            PREPARATION                #
 #########################################
-
+TASKS_DIR=/usr/local/share/frisbee_tasks
 DNSMASQ_PATH=/etc/dnsmasq.d/testbed.conf
 PXEDIR=/tftpboot/pxelinux.cfg
 PXECONF=$PXEDIR/tinycore
-STORAGEDIRECTORY=/home/crc-am/Desktop/Storage
+STORAGEDIRECTORY=/usr/local/share/storage
 
 COREUSER=root
 COREPASS=masterpassword
@@ -22,8 +22,8 @@ fi
 NODE=$1        # constructed from command line parameters
 IMAGENAME=$2   # constructed from command line parameters
 ID=$3
-ERROR="tasks/$ID-save.error"
-PROGRESS="tasks/$ID-save.progress"
+ERROR="$TASKS_DIR/$ID-save.error"
+PROGRESS="$TASKS_DIR/$ID-save.progress"
 CLIENT_LOG="$NODE-$IMAGENAME-save.log"
 #First time to use the file, overwrite
 echo "" > $CLIENT_LOG
