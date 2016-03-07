@@ -33,7 +33,7 @@ function client_excute {
 		exit -1
   	fi
 	echo "[`date`] INFO: Restarting ${NODES[$2]}" >> $LOG
-	RETURN=$(curl --write-out %{http_code} --write-out %{http_code} --silent --output /dev/null -data=""  http://193.227.16.154:7777/api/v1/vm/${NODES[$2]}/reset2)
+	RETURN=$(curl --write-out %{http_code} --write-out %{http_code} --silent --output /dev/null -data=""  http://193.227.16.199:7777/api/v1/vm/${NODES[$2]}/reset2)
 	if [ "$RETURN" -ne 200 ] ; then
 		echo "Restart from VM failed! Try to access the node itself"
 		sshpass -p $COREPASS ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no $COREUSER@$1 "reboot"
@@ -56,7 +56,7 @@ function restart_ubuntu {
 #First time to use the file, overwrite
 	echo "" > $CLIENT_LOG
 	sudo ln -sv $PXECONF ${PXELINKS[$2]}
-	RETURN=$(curl --write-out %{http_code} --write-out %{http_code} --silent --output /dev/null -data=""  http://193.227.16.154:7777/api/v1/vm/${NODES[$2]}/reset2)
+	RETURN=$(curl --write-out %{http_code} --write-out %{http_code} --silent --output /dev/null -data=""  http://193.227.16.199:7777/api/v1/vm/${NODES[$2]}/reset2)
 	if [ "$RETURN" -ne 200 ] ; then
 		echo "Restart from VM failed! Try to access the node itself in restart ubuntu"
 		ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no crc@$1 \

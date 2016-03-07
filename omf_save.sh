@@ -46,7 +46,7 @@ sudo rm -rf $PXELINK
 sudo ln -sv $PXECONF $PXELINK
 echo "[`date`] INFO: Restarting $NODE" >> $LOG
 echo "[`date`] INFO: after expected line" >> $LOG
-	RETURN=$(curl --write-out %{http_code} --write-out %{http_code} --silent --output /dev/null -data=""  http://193.227.16.154:7777/api/v1/vm/$NODE/reset2)
+	RETURN=$(curl --write-out %{http_code} --write-out %{http_code} --silent --output /dev/null -data=""  http://193.227.16.199:7777/api/v1/vm/$NODE/reset2)
 	if [ "$RETURN" -ne 200 ] ; then
 		echo "Restart from VM failed! Try to access the node itself"
 		ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null crc@$IPADDR \
