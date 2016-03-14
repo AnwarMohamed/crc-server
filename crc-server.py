@@ -4,8 +4,8 @@
 import logging
 logging.basicConfig(
     format='%(asctime)s %(levelname)s %(message)s',
-    filename='/var/log/crc-service.log',
-    level=logging.DEBUG, 
+    #filename='/var/log/crc-service.log',
+    level=logging.INFO, 
     datefmt='%Y-%m-%d %H:%M:%S')
 
 from flask import Flask, jsonify, abort, request
@@ -15,7 +15,7 @@ from paramiko.client import SSHClient
 from paramiko import AutoAddPolicy
 from subprocess import call,Popen
 import threading, os, random, string, portalocker , signal,base64
-import time, thread
+import time, thread, schedule
 from decorators import *
 
 app = Flask(__name__)
@@ -74,10 +74,18 @@ def api_vm_status(vm_name):
     else:
         try:            
             vm_internal_name = vms_mapping[vm_name[-1:]]
-
+            
             client = nodes[vm_name[:-1]]['ssh']
+            ip = nodes[vm_name[:-1]]['ip']
+
+            if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
+                response = {'message': 'Node is unavailable'}
+                response = jsonify(response)
+                return response, 503
+
             stdin, stdout, stderr = client.exec_command(
                 'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))                
+            
             if len(stdout.read()) == 0:
                 return abort(400)
 
@@ -100,6 +108,10 @@ def vm_start(node_name, vm_name):
     vm_internal_name = vms_mapping[vm_name]
 
     client = nodes[node_name]['ssh']
+    ip = nodes[node_name]['ip']
+
+    if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
+        return None    
 
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))
@@ -135,6 +147,10 @@ def vm_stop(node_name, vm_name):
     vm_internal_name = vms_mapping[vm_name]
 
     client = nodes[node_name]['ssh']
+    ip = nodes[node_name]['ip']
+
+    if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
+        return None    
 
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))
@@ -168,8 +184,12 @@ def vm_reset(node_name, vm_name):
     global nodes   
 
     vm_internal_name = vms_mapping[vm_name]
-
+    
     client = nodes[node_name]['ssh']
+    ip = nodes[node_name]['ip']
+
+    if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
+        return None    
 
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))
@@ -206,6 +226,10 @@ def vm_reset2(node_name, vm_name):
     vm_internal_name = vms_mapping[vm_name]
 
     client = nodes[node_name]['ssh']
+    ip = nodes[node_name]['ip']
+
+    if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
+        return None
 
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list vms | grep -w {0}'.format(vm_internal_name))
@@ -235,7 +259,8 @@ def vm_reset2(node_name, vm_name):
             
             n_attempts= n_attempts + 1
         print "Node is off waiting 3 seconds"
- 	time.sleep(3)
+        
+        time.sleep(3)
         print "Starting node"
         client.exec_command('VBoxManage startvm {0} --type headless'.format(vm_internal_name)) 
 
@@ -386,6 +411,8 @@ def api_user_create():
     if json_req == None or any(param not in json_req for param in json_params):            
         return abort(400)
 
+    print json_req
+
     call(["./user_add.sh", json_req['username'], json_req['password']])
 
     return ''
@@ -446,7 +473,7 @@ def experiment_execute(exp_id, script,username):
 
     p=Popen(["omf_ec", "-u" ,"amqp://10.0.0.200",  "exec",  "--oml_uri", "tcp:10.0.0.200:3003", "/home/crc-users/{0}/scripts/{1}".format(username, exp_id)], stdout=log_file)
     with open("experiments/{0}.pid".format(exp_id), "w") as pid_file:
-        pid_file.write(format(p.pid))	             
+        pid_file.write(format(p.pid))                
     p.wait()
 
     log_file.close()
@@ -520,25 +547,62 @@ def api_experiment_status(exp_id):
     except:
         abort(400)
 
+def authorize_ssh_sessions():
+    conn = mysql.connect()
+    cursor = conn.cursor()
+    
+    cursor.execute("select user_name from slices where NOW() not between start_time and end_time")
+    conn.commit()
+
+    results = cursor.fetchall()
+    for row in results:
+        call(["skill", "-KILL", "-u", row[0]])
+
+    cursor.close()
+    conn.close()
+
+def ssh_monitor_sessions():
+    schedule.every().hour.do(authorize_ssh_sessions)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 def start_ssh_monitor():
-    pass
+    thread.start_new_thread(ssh_monitor_sessions, ())        
 
 def check_ssh_alive(client):
-    if client.get_transport() != None and client.get_transport().is_active():
-        return True
+    transport = client.get_transport()
+
+    if transport != None and transport.is_active():
+        try:
+            client.exec_command('ls')
+            return True
+        except:
+            return False
     else:
         return False
+
+def reconnect_ssh(client, ip, retry):
+    try:
+        client.connect(ip, username='node5', password='crc123')
+        return True
+    except:
+        if retry == True:
+            time.sleep(30)
+            return reconnect_ssh(client, ip, True)
+        else:
+            return False
 
 def connect_ssh(client, ip, node):
     try:
         client.connect(ip, username='node5', password='crc123')
-        print ' * Connected to {0} @ {1}\n'.format(node, ip)
+        print ' * Connected to {0} @ {1}'.format(node, ip)
     except Exception, e:
-        print ' * Failed to connect to {0} @ {1}\n'.format(node, ip)
+        print ' * Failed to connect to {0} @ {1}'.format(node, ip)
 
         time.sleep(30)
-        connect_ssh(client, ip)
+        reconnect_ssh(client, ip, True)
 
 def start_ssh_pool():
     global nodes
@@ -569,7 +633,8 @@ def start_ssh_pool():
             print ' * Setting up a connection with {0}'.format(k)
             print ' * Connecting to {0}'.format(v['ip'])
 
-            client = SSHClient()            
+            client = SSHClient()
+#            client.get_transport().set_keepalive(10)            
             client.set_missing_host_key_policy(AutoAddPolicy())
 
             thread.start_new_thread(connect_ssh, (client, v['ip'], k))
