@@ -13,7 +13,7 @@ else
     mkdir -p /home/crc-users/$1 
     useradd -g crc-users -m -s /bin/bash -d /home/crc-users/$1  $1 
     echo "$1:$2" | chpasswd
-    
+    cp -v /etc/skel/.bash* /home/crc-users/$1   
     
     # create group for user
     groupadd $1 
