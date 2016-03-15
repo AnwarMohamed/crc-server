@@ -1,7 +1,11 @@
 #!/bin/bash
 
+iptables -F OUTPUT
 # allow root
- iptables -A OUTPUT  -m owner  -o br0  --gid-owner 0  -j ACCEPT
+iptables -A OUTPUT  -m owner  --gid-owner root  -j ACCEPT
+iptables -A OUTPUT  -m owner ! --gid-owner crc-users  -j ACCEPT
+#iptables -A OUTPUT  -m owner  --uid-owner nobody  -j ACCEPT
+#iptables -A OUTPUT -m pkttype --pkt-type multicast -j ACCEPT
 
 # create user group filter
 iptables -N USERS_NODES_FILTER 
