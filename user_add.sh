@@ -19,7 +19,7 @@ else
     groupadd $1 
     usermod -aG $1 $1 
     # create iptable chain for user
-    iptables -N $1 -m owner   --gid-owner $1
-    iptables -A USERS_NODES_FILTER  -j $1
+    iptables -N $1
+    iptables -A USERS_NODES_FILTER  -j $1 -m owner   --gid-owner $1
 
 fi

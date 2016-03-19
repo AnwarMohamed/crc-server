@@ -290,8 +290,8 @@ def image_load(name, path, node_list, task_id_list):
         call(["touch", "tasks/{0}-load.lock".format(task_id)])
         call(["touch", "tasks/{0}-load.progress".format(task_id)])
 
-    print " ".join(["./omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
-    call(["./omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
+    print " ".join(["omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
+    call(["omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
     for task_id in task_id_list:
         call(["rm", "tasks/{0}-load.lock".format(task_id)])
 
@@ -313,14 +313,14 @@ def api_image_load():
     thread.start()
 
     return jsonify({'task_id': json_req['task_id']})
-
+log_path="/usr/local/share/frisbee_tasks/"
 last_progress="0"
 @app.route('/api/v1/image/load/<task_id>', methods=['GET'])
 def api_image_load_status(task_id):        
 
-    progress_log = "tasks/{0}-load.progress".format(task_id)
-    error_log = "tasks/{0}-load.error".format(task_id)    
-    lock_path = "tasks/{0}-load.lock".format(task_id)
+    progress_log = log_path+"{0}-load.progress".format(task_id)
+    error_log = log_path+"{0}-load.error".format(task_id)    
+    lock_path = log_path+"{0}-load.lock".format(task_id)
     
     if os.path.exists(progress_log) == False:
         return abort(400)
@@ -353,7 +353,7 @@ def image_save(name, path, node_list, task_id):
     call(["rm", "-rf", "tasks/{0}-save.*".format(task_id)])
     call(["mkdir", "-p", "tasks/"])
     call(["touch", "tasks/{0}-save.lock".format(task_id)])
-    call(["./omf_save.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(task_id)])
+    call(["omf_save.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(task_id)])
     call(["rm", "-rf", "tasks/{0}-save.lock".format(task_id)])
 
 @app.route('/api/v1/image/save', methods=['POST'])
