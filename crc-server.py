@@ -76,7 +76,7 @@ def start_vm_mapping():
 		select vm_name,hv_name, node_ip as physical_name  
 		from  PORTAL.portal_virtualnode 
 		join PORTAL.portal_physicalnode 
-		where PORTAL.portal_virtualnode.device_ref_id=PORTAL.portal_physicalnode.id
+		where PORTAL.portal_virtualnode.node_ref_id=PORTAL.portal_physicalnode.id
 	) as tst; """
     cursor.execute(sql_str)
     conn.commit()
@@ -84,6 +84,7 @@ def start_vm_mapping():
     results = cursor.fetchall()
     #print results
     for row in results:
+        print row
         vms_mapping[row[0]] = [row[1],row[2]]
         
     #print vms_mapping['node1w']
@@ -274,7 +275,7 @@ def vm_reset2(vm_name):
 
     stdin, stdout, stderr = client.exec_command(
         'VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
-
+    
     if len(stdout.read()) == 0:
         client.exec_command('VBoxManage startvm {0} --type headless'.format(vm_internal_name)) 
     else:
@@ -282,11 +283,13 @@ def vm_reset2(vm_name):
         print "Issued ACPI shutdown"
         stdin, stdout, stderr = client.exec_command('VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
         
-        n_attempts=0 
-        while len(stdout.read()) != 0:
+        n_attempts=0
+        ret='emp' 
+        while len(ret) != 0:
             time.sleep(1)
             print "Checking if node is off"
             stdin, stdout, stderr = client.exec_command('VBoxManage list runningvms | grep -w {0}'.format(vm_internal_name))
+            ret=stdout.read()
             if n_attempts>=10:
                 print "Forcing shutdown"
                 client.exec_command('VBoxManage controlvm {0} poweroff'.format(vm_internal_name)) 
@@ -320,7 +323,7 @@ def image_load(name, path, node_list, task_id_list):
         call(["rm", "-rf", log_path+"{0}-load.progress".format(task_id)])  
         print(" ".join(["rm", "-rf", log_path+"{0}-load.progress".format(task_id)])) 
         call(["rm", "-rf", log_path+"{0}-load.lock".format(task_id)]) 
-        call(["rm", "-rf", log_path+"t{0}-load.error".format(task_id)]) 
+        call(["rm", "-rf", log_path+"{0}-load.error".format(task_id)]) 
         call(["mkdir", "-p", log_path])
         call(["touch",log_path+ "{0}-load.lock".format(task_id)])
         call(["touch",log_path+"{0}-load.progress".format(task_id)])
