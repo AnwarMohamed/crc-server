@@ -317,18 +317,18 @@ def api_vm_reset2(vm_name):
 
 def image_load(name, path, node_list, task_id_list):   
     for task_id in task_id_list:
-        call(["rm", "-rf", "tasks/{0}-load.progress".format(task_id)])  
-        print(" ".join(["rm", "-rf", "tasks/{0}-load.progress".format(task_id)])) 
-        call(["rm", "-rf", "tasks/{0}-load.lock".format(task_id)]) 
-        call(["rm", "-rf", "tasks/{0}-load.error".format(task_id)]) 
-        call(["mkdir", "-p", "tasks/"])
-        call(["touch", "tasks/{0}-load.lock".format(task_id)])
-        call(["touch", "tasks/{0}-load.progress".format(task_id)])
+        call(["rm", "-rf", log_path+"{0}-load.progress".format(task_id)])  
+        print(" ".join(["rm", "-rf", log_path+"{0}-load.progress".format(task_id)])) 
+        call(["rm", "-rf", log_path+"{0}-load.lock".format(task_id)]) 
+        call(["rm", "-rf", log_path+"t{0}-load.error".format(task_id)]) 
+        call(["mkdir", "-p", log_path])
+        call(["touch",log_path+ "{0}-load.lock".format(task_id)])
+        call(["touch",log_path+"{0}-load.progress".format(task_id)])
 
     print " ".join(["omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
     call(["omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
     for task_id in task_id_list:
-        call(["rm", "tasks/{0}-load.lock".format(task_id)])
+        call(["rm", log_path+"{0}-load.lock".format(task_id)])
 
 @app.route('/api/v1/image/load', methods=['POST'])
 def api_image_load():
