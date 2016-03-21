@@ -27,7 +27,7 @@ app = Flask(__name__)
 mysql = MySQL()
 app.config['MYSQL_DATABASE_USER'] = 'root'
 app.config['MYSQL_DATABASE_PASSWORD'] = ''
-app.config['MYSQL_DATABASE_DB'] = 'crc-testbed'
+app.config['MYSQL_DATABASE_DB'] = 'PORTAL'
 app.config['MYSQL_DATABASE_HOST'] = '127.0.0.1'
 mysql.init_app(app)
 
@@ -59,24 +59,52 @@ def not_authorized(e):
     response.status_code = 405
     return response
 
-vms_mapping = {
-    'w': 'vm1',
-    'u': 'vm2',
-    'r': 'vm3'
-}
+vms_mapping = {}
+
+def start_vm_mapping():
+    conn = mysql.connect()
+    cursor = conn.cursor()
+    sql_str="""select vm_name,hv_name,physical_name from 
+	(
+		select vm_name,hv_name, node_ip as physical_name  
+		from  PORTAL.portal_simulationvm join PORTAL.portal_physicalnode 
+		where PORTAL.portal_physicalnode.id=100
+	) as sim
+	union 
+	select vm_name,hv_name,physical_name from 
+	(
+		select vm_name,hv_name, node_ip as physical_name  
+		from  PORTAL.portal_virtualnode 
+		join PORTAL.portal_physicalnode 
+		where PORTAL.portal_virtualnode.device_ref_id=PORTAL.portal_physicalnode.id
+	) as tst; """
+    cursor.execute(sql_str)
+    conn.commit()
+
+    results = cursor.fetchall()
+    #print results
+    for row in results:
+        vms_mapping[row[0]] = [row[1],row[2]]
+        
+    #print vms_mapping['node1w']
+
+    cursor.close()
+    conn.close()
 
 @app.route('/api/v1/vm/<vm_name>/status', methods=['GET'])
 @crossdomain(origin='*')
 def api_vm_status(vm_name):
     global nodes
-    if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
+    if vm_name not in vms_mapping:
         abort(400)
     else:
         try:            
-            vm_internal_name = vms_mapping[vm_name[-1:]]
+            vm_data=vms_mapping[vm_name]
+            vm_internal_name = vm_data[0]
+            physical_name = vm_data[1]
             
-            client = nodes[vm_name[:-1]]['ssh']
-            ip = nodes[vm_name[:-1]]['ip']
+            client = nodes[physical_name]['ssh']
+            ip = nodes[physical_name]['ip']
 
             if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
                 response = {'message': 'Node is unavailable'}
@@ -102,13 +130,15 @@ def api_vm_status(vm_name):
             abort(500)
 
 
-def vm_start(node_name, vm_name):
+def vm_start( vm_name):
     global nodes  
 
-    vm_internal_name = vms_mapping[vm_name]
-
-    client = nodes[node_name]['ssh']
-    ip = nodes[node_name]['ip']
+    vm_data=vms_mapping[vm_name]
+    vm_internal_name = vm_data[0]
+    physical_name = vm_data[1]
+            
+    client = nodes[physical_name]['ssh']
+    ip = nodes[physical_name]['ip']
 
     if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
         return None    
@@ -130,24 +160,25 @@ def vm_start(node_name, vm_name):
 @crossdomain(origin='*')
 def api_vm_start(vm_name):        
     global nodes
-    if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
-        return abort(400)
+    if vm_name not in vms_mapping:
+        abort(400)
     else:
         thread = threading.Thread(
             target=vm_start, 
-            args=(vm_name[:-1], vm_name[-1:]))
+            args=(vm_name,))
         thread.start()
 
     return ''
 
 
-def vm_stop(node_name, vm_name):
+def vm_stop( vm_name):
     global nodes   
-
-    vm_internal_name = vms_mapping[vm_name]
-
-    client = nodes[node_name]['ssh']
-    ip = nodes[node_name]['ip']
+    vm_data=vms_mapping[vm_name]
+    vm_internal_name = vm_data[0]
+    physical_name = vm_data[1]
+            
+    client = nodes[physical_name]['ssh']
+    ip = nodes[physical_name]['ip']
 
     if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
         return None    
@@ -169,24 +200,26 @@ def vm_stop(node_name, vm_name):
 @crossdomain(origin='*')
 def api_vm_stop(vm_name):        
     global nodes
-    if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
+    if vm_name not in vms_mapping:
         abort(400)
     else:
         thread = threading.Thread(
             target=vm_stop, 
-            args=(vm_name[:-1], vm_name[-1:]))
+            args=(vm_name,))
         thread.start() 
 
     return ''      
 
 
-def vm_reset(node_name, vm_name):
+def vm_reset(vm_name):
     global nodes   
 
-    vm_internal_name = vms_mapping[vm_name]
-    
-    client = nodes[node_name]['ssh']
-    ip = nodes[node_name]['ip']
+    vm_data=vms_mapping[vm_name]
+    vm_internal_name = vm_data[0]
+    physical_name = vm_data[1]
+            
+    client = nodes[physical_name]['ssh']
+    ip = nodes[physical_name]['ip']
 
     if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
         return None    
@@ -209,24 +242,26 @@ def vm_reset(node_name, vm_name):
 @app.route('/api/v1/vm/<vm_name>/reset', methods=['POST'])
 def api_vm_reset(vm_name):        
     global nodes
-    if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
+    if vm_name not in vms_mapping:
         return abort(400)
     else:
         thread = threading.Thread(
             target=vm_reset, 
-            args=(vm_name[:-1], vm_name[-1:]))        
+            args=( vm_name,))        
         thread.start() 
 
     return ''
 
 
-def vm_reset2(node_name, vm_name):
+def vm_reset2(vm_name):
     global nodes   
 
-    vm_internal_name = vms_mapping[vm_name]
-
-    client = nodes[node_name]['ssh']
-    ip = nodes[node_name]['ip']
+    vm_data=vms_mapping[vm_name]
+    vm_internal_name = vm_data[0]
+    physical_name = vm_data[1]
+            
+    client = nodes[physical_name]['ssh']
+    ip = nodes[physical_name]['ip']
 
     if not check_ssh_alive(client) and not reconnect_ssh(client, ip, False):
         return None
@@ -269,12 +304,12 @@ def vm_reset2(node_name, vm_name):
 @crossdomain(origin='*')
 def api_vm_reset2(vm_name):        
     global nodes
-    if vm_name[:-1] not in nodes or vm_name[-1:] not in 'wur':
+    if vm_name not in vms_mapping:
         return abort(400)
     else:
         thread = threading.Thread(
             target=vm_reset2, 
-            args=(vm_name[:-1], vm_name[-1:]))        
+            args=(vm_name,))        
         thread.start() 
 
     return ''
@@ -660,6 +695,7 @@ def start_logo():
 
 if __name__ == '__main__':
     start_logo()
+    start_vm_mapping()
     start_ssh_pool()
     start_ssh_monitor()
     

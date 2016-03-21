@@ -68,7 +68,7 @@ def pam_sm_acct_mgmt(pamh, flags, argv):
         syslog.syslog ("checking user: {0}".format(user))
 
         cursor=db.cursor()
-        cursor.execute("select count(*) from slices where user_name='{0}' and NOW() between start_time and end_time".format(user))
+        cursor.execute("select count(*) from portal_reservation inner join portal_myuser as user on user_ref_id=user.id where username='{0}' and NOW() between f_start_time and f_end_time".format(user))
         count_raw=cursor.fetchone()[0]
 
         if int(count_raw) == 1:
