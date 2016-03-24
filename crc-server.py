@@ -31,6 +31,9 @@ app.config['MYSQL_DATABASE_DB'] = 'PORTAL'
 app.config['MYSQL_DATABASE_HOST'] = '127.0.0.1'
 mysql.init_app(app)
 
+frisbee_log_path="/usr/local/share/frisbee_tasks/"
+experiments_log_path="/usr/local/share/experiments/"
+
 @app.errorhandler(404)
 def resource_not_found(e):
     response = {'message': 'Resource Not Found'}
@@ -65,26 +68,26 @@ def start_vm_mapping():
     conn = mysql.connect()
     cursor = conn.cursor()
     sql_str="""select vm_name,hv_name,physical_name from 
-	(
-		select vm_name,hv_name, node_ip as physical_name  
-		from  PORTAL.portal_simulationvm join PORTAL.portal_physicalnode 
-		where PORTAL.portal_physicalnode.id=100
-	) as sim
-	union 
-	select vm_name,hv_name,physical_name from 
-	(
-		select vm_name,hv_name, node_ip as physical_name  
-		from  PORTAL.portal_virtualnode 
-		join PORTAL.portal_physicalnode 
-		where PORTAL.portal_virtualnode.node_ref_id=PORTAL.portal_physicalnode.id
-	) as tst; """
+    (
+        select vm_name,hv_name, node_ip as physical_name  
+        from  PORTAL.portal_simulationvm join PORTAL.portal_physicalnode 
+        where PORTAL.portal_physicalnode.id=100
+    ) as sim
+    union 
+    select vm_name,hv_name,physical_name from 
+    (
+        select vm_name,hv_name, node_ip as physical_name  
+        from  PORTAL.portal_virtualnode 
+        join PORTAL.portal_physicalnode 
+        where PORTAL.portal_virtualnode.node_ref_id=PORTAL.portal_physicalnode.id
+    ) as tst; """
     cursor.execute(sql_str)
     conn.commit()
 
     results = cursor.fetchall()
     #print results
     for row in results:
-        print row
+        #print row
         vms_mapping[row[0]] = [row[1],row[2]]
         
     #print vms_mapping['node1w']
@@ -131,7 +134,7 @@ def api_vm_status(vm_name):
             abort(500)
 
 
-def vm_start( vm_name):
+def vm_start(vm_name):
     global nodes  
 
     vm_data=vms_mapping[vm_name]
@@ -241,6 +244,7 @@ def vm_reset(vm_name):
 
 
 @app.route('/api/v1/vm/<vm_name>/reset', methods=['POST'])
+@crossdomain(origin='*')
 def api_vm_reset(vm_name):        
     global nodes
     if vm_name not in vms_mapping:
@@ -248,7 +252,7 @@ def api_vm_reset(vm_name):
     else:
         thread = threading.Thread(
             target=vm_reset, 
-            args=( vm_name,))        
+            args=(vm_name,))        
         thread.start() 
 
     return ''
@@ -320,20 +324,21 @@ def api_vm_reset2(vm_name):
 
 def image_load(name, path, node_list, task_id_list):   
     for task_id in task_id_list:
-        call(["rm", "-rf", log_path+"{0}-load.progress".format(task_id)])  
-        print(" ".join(["rm", "-rf", log_path+"{0}-load.progress".format(task_id)])) 
-        call(["rm", "-rf", log_path+"{0}-load.lock".format(task_id)]) 
-        call(["rm", "-rf", log_path+"{0}-load.error".format(task_id)]) 
-        call(["mkdir", "-p", log_path])
-        call(["touch",log_path+ "{0}-load.lock".format(task_id)])
-        call(["touch",log_path+"{0}-load.progress".format(task_id)])
+        call(["rm", "-rf", frisbee_log_path+"{0}-load.progress".format(task_id)])  
+        print(" ".join(["rm", "-rf", frisbee_log_path+"{0}-load.progress".format(task_id)])) 
+        call(["rm", "-rf", frisbee_log_path+"{0}-load.lock".format(task_id)]) 
+        call(["rm", "-rf", frisbee_log_path+"{0}-load.error".format(task_id)]) 
+        call(["mkdir", "-p", frisbee_log_path])
+        call(["touch",frisbee_log_path+ "{0}-load.lock".format(task_id)])
+        call(["touch",frisbee_log_path+"{0}-load.progress".format(task_id)])
 
     print " ".join(["omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
     call(["omf_load.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(','.join(task_id_list))])
     for task_id in task_id_list:
-        call(["rm", log_path+"{0}-load.lock".format(task_id)])
+        call(["rm", frisbee_log_path+"{0}-load.lock".format(task_id)])
 
 @app.route('/api/v1/image/load', methods=['POST'])
+@crossdomain(origin='*')
 def api_image_load():
 
     json_req = request.get_json(force=True, silent=True)
@@ -351,14 +356,15 @@ def api_image_load():
     thread.start()
 
     return jsonify({'task_id': json_req['task_id']})
-log_path="/usr/local/share/frisbee_tasks/"
+
 last_progress="0"
 @app.route('/api/v1/image/load/<task_id>', methods=['GET'])
+@crossdomain(origin='*')
 def api_image_load_status(task_id):        
 
-    progress_log = log_path+"{0}-load.progress".format(task_id)
-    error_log = log_path+"{0}-load.error".format(task_id)    
-    lock_path = log_path+"{0}-load.lock".format(task_id)
+    progress_log = frisbee_log_path+"{0}-load.progress".format(task_id)
+    error_log = frisbee_log_path+"{0}-load.error".format(task_id)    
+    lock_path = frisbee_log_path+"{0}-load.lock".format(task_id)
     
     if os.path.exists(progress_log) == False:
         return abort(400)
@@ -388,13 +394,14 @@ def api_image_load_status(task_id):
 
 
 def image_save(name, path, node_list, task_id):    
-    call(["rm", "-rf", "tasks/{0}-save.*".format(task_id)])
-    call(["mkdir", "-p", "tasks/"])
-    call(["touch", "tasks/{0}-save.lock".format(task_id)])
+    call(["rm", "-rf", frisbee_log_path+"{0}-save.*".format(task_id)])
+    call(["mkdir", "-p", frisbee_log_path])
+    call(["touch", frisbee_log_path+"{0}-save.lock".format(task_id)])
     call(["omf_save.sh", "{0}".format(','.join(node_list)), "{0}".format(name), "{0}".format(task_id)])
-    call(["rm", "-rf", "tasks/{0}-save.lock".format(task_id)])
+    call(["rm", "-rf", frisbee_log_path+"{0}-save.lock".format(task_id)])
 
 @app.route('/api/v1/image/save', methods=['POST'])
+@crossdomain(origin='*')
 def api_image_save():        
 
     json_req = request.get_json(force=True, silent=True)
@@ -415,11 +422,12 @@ def api_image_save():
 
 
 @app.route('/api/v1/image/save/<task_id>', methods=['GET'])
+@crossdomain(origin='*')
 def api_image_save_status(task_id):
 
-    progress_log = "tasks/{0}-save.progress".format(task_id)
-    error_log = "tasks/{0}-save.error".format(task_id)    
-    lock_path = "tasks/{0}-save.lock".format(task_id)
+    progress_log = frisbee_log_path+"{0}-save.progress".format(task_id)
+    error_log = frisbee_log_path+"{0}-save.error".format(task_id)    
+    lock_path = frisbee_log_path+"{0}-save.lock".format(task_id)
     
     if os.path.exists(progress_log) == False:
         return abort(400)
@@ -456,53 +464,19 @@ def api_user_create():
     return ''
 
 @app.route('/api/v1/user/<user_name>', methods=['DELETE'])
+@crossdomain(origin='*')
 def api_user_delete(user_name):    
     
     FNULL = open(os.devnull, 'w')
-    call(["./user_delete.sh", user_name], stdout=FNULL, stderr=FNULL)
-
-    conn = mysql.connect()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "delete from slices where user_name = {0}"
-        .format(json_req['user_name']))
-    conn.commit()
-
-    cursor.close()
-    conn.close()       
+    call(["./user_delete.sh", user_name], stdout=FNULL, stderr=FNULL)    
 
     return ''
-
-
-@app.route('/api/v1/slice/', methods=['POST'])
-def api_slice_create():        
-    
-    json_req = request.get_json(force=True, silent=True)
-    json_params = ['user_name', 'start_time', 'end_time']
-
-    if json_req == None or any(param not in json_req for param in json_params):            
-        return abort(400)
-
-    conn = mysql.connect()
-    cursor = conn.cursor()
-    
-    cursor.execute(
-        "insert into slices values ('{0}','{1}','{2}') on duplicate key update start_time='{1}', end_time='{2}'"
-        .format(json_req['user_name'], json_req['start_time'], json_req['end_time']))
-    conn.commit()
-
-    cursor.close()
-    conn.close()
-
-    return ''
-
 
 def experiment_execute(exp_id, script,username):
-    call(["rm", "-rf", "experiments/{0}.*".format(exp_id)])
-    call(["touch", "experiments/{0}.lock".format(exp_id)])
+    call(["rm", "-rf", experiments_log_path+"{0}.*".format(exp_id)])
+    call(["touch", experiments_log_path+"{0}.lock".format(exp_id)])
     call(["mkdir", "-p", "/home/crc-users/{0}/scripts".format(username)])  
-    log_file = open("experiments/{0}.log".format(exp_id), "w+") 
+    log_file = open(experiments_log_path+"{0}.log".format(exp_id), "w+") 
 
     with open("/home/crc-users/{0}/scripts/{1}".format(username, exp_id), 'w') as file_:
         file_.write(base64.b64decode(script))
@@ -510,15 +484,16 @@ def experiment_execute(exp_id, script,username):
     #call(["omf_ec", "-u" ,"amqp://10.0.0.200",  "exec",  "--oml_uri", "tcp:10.0.0.200:3003", path,"& ", "echo", "$!", ">", "experiments/{0}.pid".format(exp_id)], stdout=log_file)
 
     p=Popen(["omf_ec", "-u" ,"amqp://10.0.0.200",  "exec",  "--oml_uri", "tcp:10.0.0.200:3003", "/home/crc-users/{0}/scripts/{1}".format(username, exp_id)], stdout=log_file)
-    with open("experiments/{0}.pid".format(exp_id), "w") as pid_file:
+    with open(experiments_log_path+"{0}.pid".format(exp_id), "w") as pid_file:
         pid_file.write(format(p.pid))                
     p.wait()
 
     log_file.close()
 
-    call(["rm", "-rf", "experiments/{0}.lock".format(exp_id)])
+    call(["rm", "-rf", experiments_log_path+"{0}.lock".format(exp_id)])
 
 @app.route('/api/v1/experiment/', methods=['POST'])
+@crossdomain(origin='*')
 def api_experiment_execute(): 
     
     json_req = request.get_json(force=True, silent=True)
@@ -541,14 +516,14 @@ def api_experiment_execute():
 @crossdomain(origin='*')
 def api_experiment_delete(exp_id):
     
-    pid_path = "experiments/{0}.pid".format(exp_id)
+    pid_path = experiments_log_path+"{0}.pid".format(exp_id)
 
     if os.path.exists(pid_path) == False:
         return abort(400)
 
     try:                
         #call(["cat", "experiments/{0}.pid".format(exp_id), "|","xargs", "kill", "-9"])
-        with open("experiments/{0}.pid".format(exp_id), 'r') as pid_file:
+        with open(experiments_log_path+"{0}.pid".format(exp_id), 'r') as pid_file:
            pid=int(pid_file.readline().rstrip('\n'))
         os.kill(pid, signal.SIGTERM)
         return ''
@@ -557,12 +532,13 @@ def api_experiment_delete(exp_id):
 
 
 @app.route('/api/v1/experiment/<exp_id>', methods=['GET'])
+@crossdomain(origin='*')
 def api_experiment_status(exp_id):
 
-    log_path = "experiments/{0}.log".format(exp_id)
-    lock_path = "experiments/{0}.lock".format(exp_id)
+    frisbee_log_path = experiments_log_path+"{0}.log".format(exp_id)
+    lock_path = experiments_log_path+"{0}.lock".format(exp_id)
 
-    if os.path.exists(log_path) == False:
+    if os.path.exists(frisbee_log_path) == False:
         return abort(400)
 
     try:
@@ -573,7 +549,7 @@ def api_experiment_status(exp_id):
         else:
             status = 'running'
 
-        with open("experiments/{0}.log".format(exp_id), 'r') as log_file:            
+        with open(experiments_log_path+"{0}.log".format(exp_id), 'r') as log_file:            
             for line in log_file:
                 log.append(line.rstrip())
 
@@ -588,12 +564,18 @@ def api_experiment_status(exp_id):
 def authorize_ssh_sessions():
     conn = mysql.connect()
     cursor = conn.cursor()
-    
-    cursor.execute("select user_name from slices where NOW() not between start_time and end_time")
+        
+    cursor.execute("""
+    	select username from portal_reservation 
+    	inner join portal_myuser as user 
+    	on user_ref_id=user.id 
+    	where NOW() not between f_start_time and f_end_time
+    	""")
     conn.commit()
 
     results = cursor.fetchall()
     for row in results:
+    	print "Kicking {0}".format(row[0])
         call(["skill", "-KILL", "-u", row[0]])
 
     cursor.close()
@@ -614,7 +596,7 @@ def check_ssh_alive(client):
 
     if transport != None and transport.is_active():
         try:
-            client.exec_command('ls')
+            client.exec_command('uname')
             return True
         except:
             return False
@@ -622,15 +604,15 @@ def check_ssh_alive(client):
         return False
 
 def reconnect_ssh(client, ip, retry):
-    try:
-        client.connect(ip, username='node5', password='crc123')
-        return True
-    except:
-        if retry == True:
-            time.sleep(30)
-            return reconnect_ssh(client, ip, True)
-        else:
-            return False
+    while True:
+        try:
+            client.connect(ip, username='node5', password='crc123')
+            return True
+        except:     
+            if retry == True:
+                time.sleep(30)                              
+            else:
+                return False
 
 def connect_ssh(client, ip, node):
     try:
