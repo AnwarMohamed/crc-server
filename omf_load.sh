@@ -108,7 +108,7 @@ fi
 
 
 for i in "${IDS[@]}"; do
-	echo -n "t 0%" >> "tasks/$i-load.progress"
+	echo -n "t 0%" >> $PROGRESS
 done
 
 NODES_STR=$1        # comma separated string of nodes on which we need to load images
@@ -123,7 +123,7 @@ IMAGENAME=$2   # constructed from command line parameters
 #if [ ! -f $STORAGEDIRECTORY/$IMAGENAME ]; then
 if [ ! -f $IMAGENAME ]; then
 	for i in "${IDS[@]}"; do
-    		echo "ERROR: Image not found!" >> "tasks/$i-load.error"
+    		echo "ERROR: Image not found!" >> $ERROR
 	done
     exit -1
 fi
@@ -133,7 +133,7 @@ for i in "${NODES[@]}"; do
 	RECORDS[$INDEX]=`cat $DNSMASQ_PATH | grep ,"$i",` # omf.crc.
 	if [ -z "${RECORDS[$INDEX]}" ]; then
 	for i in "${IDS[@]}"; do
-    		echo "ERROR: Cannot find node with the name ${NODES[$INDEX]}" >> "tasks/$i-load.error"
+    		echo "ERROR: Cannot find node with the name ${NODES[$INDEX]}" >> $ERROR
 	done
 	  exit -1
 	fi
@@ -198,7 +198,7 @@ for i in "${IPADDRS[@]}"; do
 	else
 	  echo "${NODES[$INDEX]} is unreachable. Check that it is ON and connected properly to the network"
 	  echo "[`date`] INFO: ${NODES[$INDEX]} is unreachable. Check that it is ON and connected properly to the network" >> $LOG
-    	  echo "ERROR: ${NODES[$INDEX]} is unreachable on the network" >> "tasks/${IDS[$INDEX]}-load.error"
+    	  echo "ERROR: ${NODES[$INDEX]} is unreachable on the network" >> $ERROR
 	  exit -1
 	fi
 	INDEX=$INDEX+1
