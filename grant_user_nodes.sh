@@ -1,11 +1,7 @@
 #!/bin/bash
 #arguments are: nodeList imageName
 set -x #-e
-LOG=""
 
-
-echo "[`date`] INFO: Starting omf_laod.sh" >> $LOG
-TASKS_DIR=/usr/local/share/frisbee_tasks
 DNSMASQ_PATH=/etc/dnsmasq.d/testbed.conf
 
 
@@ -37,9 +33,6 @@ for i in "${NODES[@]}"; do
 	IPADDRS[$INDEX]=`echo ${RECORDS[$INDEX]} | cut -d , -f 4`
 	INDEX=$INDEX+1
 done
-
-#echo "[`date`] INFO: OMF Load Preparation phase finished" >> $LOG
-
 
 
 iptables -F $USER_NAME 
