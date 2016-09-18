@@ -459,7 +459,7 @@ def api_user_create():
 
     print json_req
 
-    call(["./user_add.sh", json_req['username'], json_req['password']])
+    call(["/home/crc-admin/crc-server/user_add.sh", json_req['username'], json_req['password']])
 
     return ''
 

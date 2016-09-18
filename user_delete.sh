@@ -5,7 +5,7 @@ if [[ $1 == "" ]] ; then
 fi
 
 if groups $1 | grep "crc-users"; then
-    groupdel $1
+#    groupdel $1
     userdel -f -r $1 >& /dev/null
     iptables -F $1
     iptables -D USERS_NODES_FILTER -j $1
