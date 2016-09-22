@@ -215,6 +215,23 @@ def api_vm_stop(vm_name):
     return ''      
 
 
+@app.route('/api/v1/slice/', methods=['POST'])
+@crossdomain(origin='*')
+def api_create_slice():     
+
+    json_req = request.get_json(force=True, silent=True)
+    json_params = ['username','nodes_list','start_time','end_time']
+    print json_req
+    if json_req == None or any(param not in json_req for param in json_params):            
+        return abort(400)
+
+    print json_req
+
+    call(["/home/crc-admin/crc-server/grant_user_nodes_timeslot.sh", json_req['username'], ",".join(json_req['nodes_list']), json_req['start_time'],  json_req['end_time']])
+
+    return ''
+    
+
 def vm_reset(vm_name):
     global nodes   
 
