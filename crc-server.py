@@ -31,8 +31,14 @@ app.config['MYSQL_DATABASE_DB'] = 'PORTAL'
 app.config['MYSQL_DATABASE_HOST'] = '127.0.0.1'
 mysql.init_app(app)
 
+#app.config['static_url_path']=''
+
 frisbee_log_path="/usr/local/share/frisbee_tasks/"
 experiments_log_path="/usr/local/share/experiments/"
+commlabs_files_path="/usr/local/share/commlabs/files/"
+commlabs_data_path="/usr/local/share/commlabs/data/"
+commlabs_results_path="/home/crc-admin/crc-server/static/"
+comm_labs_remote_path="/home/crc/samer.txt"
 
 @app.errorhandler(404)
 def resource_not_found(e):
@@ -577,6 +583,80 @@ def api_experiment_status(exp_id):
             })
     except:
         abort(400)
+
+
+@app.route('/api/v1/commlabs/', methods=['POST'])
+@crossdomain(origin='*')
+def api_commlabs_execute(): 
+    json_req = request.get_json(force=True, silent=True)
+    json_params = ["user_id","exp_name","tx_gain","rx_gain","frequency","sample_rate","transmitter_node", "receiver_node"]    
+    print json_req
+    if json_req == None or any(param not in json_req for param in json_params):            
+        return abort(400)
+    thread = threading.Thread(
+        target=commlabs_execute, 
+        args=( json_req['user_id'], json_req['exp_name'], float(json_req['tx_gain']), float(json_req['rx_gain']),
+               float(json_req['frequency']),float(json_req['sample_rate']),json_req['transmitter_node'],json_req['receiver_node']))        
+    thread.start()
+    return ''
+    
+def commlabs_execute(user_id,exp_name,tx_gain,rx_gain,frequency,sample_rate,transmitter_node,receiver_node):
+    call(["rm", "-rf", "{}{}.*".format(commlabs_data_path,user_id)])
+    call(["touch", "{}{}.lock".format(commlabs_data_path,user_id)])
+    log_file = open("{}{}.log".format(commlabs_data_path,user_id), "w+")     
+
+    p=Popen(["echo", "tx-gain {} rx-gain {} frequency {} sample_rate {} tx-node {} rx-node {}".format( tx_gain, rx_gain,frequency, sample_rate, transmitter_node,receiver_node)], stdout=log_file)
+    with open("{}{}.pid".format(commlabs_data_path,user_id), "w") as pid_file:
+        pid_file.write(format(p.pid))                
+    p.wait()
+
+    log_file.close()
+    call(["scp", "crc@{}:{}".format(receiver_node, comm_labs_remote_path), "{}{}.mp4".format(commlabs_results_path,user_id)])
+    call(["rm", "-rf", "{}{}.lock".format(commlabs_data_path,user_id)])
+    
+@app.route('/api/v1/commlabs/status/<user_id>', methods=['GET'])
+@crossdomain(origin='*')
+def api_commlabs_status(user_id):
+
+    log_path = "{}{}.log".format(commlabs_data_path,user_id)
+    lock_path = "{}{}.lock".format(commlabs_data_path,user_id)
+
+    if os.path.exists(log_path) == False:
+        return abort(400)
+
+    try:
+        log = []
+
+        if os.path.exists(lock_path) == False:
+            status = 'finished'
+        else:
+            status = 'running'
+
+        with open("{}{}.log".format(commlabs_data_path,user_id), 'r') as log_file:            
+            for line in log_file:
+                log.append(line.rstrip())
+
+        return jsonify({
+            'status': status, 
+            'log': log,
+            'done': not os.path.exists(lock_path)
+            })
+    except:
+        abort(400)
+
+@app.route('/api/v1/commlabs/results/<user_id>', methods=['GET'])
+@crossdomain(origin='*')
+def api_commlabs_results(user_id):
+    lock_path = "{}{}.lock".format(commlabs_data_path,user_id)
+    if os.path.exists(lock_path) == False:
+        print "{}{}.mp4".format(commlabs_data_path,user_id)
+        #return app.send_static_file('samer')
+        return app.send_static_file("{}.mp4".format(user_id))
+    else:
+        return "Still executing experiment."
+    
+    
+
 
 def authorize_ssh_sessions():
     conn = mysql.connect()
