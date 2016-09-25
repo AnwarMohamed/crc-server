@@ -38,7 +38,7 @@ experiments_log_path="/usr/local/share/experiments/"
 commlabs_files_path="/usr/local/share/commlabs/files/"
 commlabs_data_path="/usr/local/share/commlabs/data/"
 commlabs_results_path="/home/crc-admin/crc-server/static/"
-comm_labs_remote_path="/home/crc/samer.txt"
+comm_labs_remote_path="/home/crc/test.mp4"
 
 @app.errorhandler(404)
 def resource_not_found(e):
@@ -589,7 +589,7 @@ def api_experiment_status(exp_id):
 @crossdomain(origin='*')
 def api_commlabs_execute(): 
     json_req = request.get_json(force=True, silent=True)
-    json_params = ["user_id","exp_name","tx_gain","rx_gain","frequency","sample_rate","transmitter_node", "receiver_node"]    
+    json_params = ["user_id","exp_name","tx_gain","rx_gain","frequency","sample_rate","transmitter_node", "receiver_node", "modulation","ber"]    
     print json_req
     if json_req == None or any(param not in json_req for param in json_params):            
         return abort(400)
@@ -649,7 +649,7 @@ def api_commlabs_status(user_id):
 def api_commlabs_results(user_id):
     lock_path = "{}{}.lock".format(commlabs_data_path,user_id)
     if os.path.exists(lock_path) == False:
-        print "{}{}.mp4".format(commlabs_data_path,user_id)
+        #print "{}{}.mp4".format(commlabs_data_path,user_id)
         #return app.send_static_file('samer')
         return app.send_static_file("{}.mp4".format(user_id))
     else:
