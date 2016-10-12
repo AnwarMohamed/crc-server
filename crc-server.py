@@ -38,7 +38,9 @@ experiments_log_path="/usr/local/share/experiments/"
 commlabs_files_path="/usr/local/share/commlabs/files/"
 commlabs_data_path="/usr/local/share/commlabs/data/"
 commlabs_results_path="/home/crc-admin/crc-server/static/"
-comm_labs_remote_path="/home/crc/test.mp4"
+#comm_labs_remote_path="/home/crc/scatter_osc_final.mp4"
+comm_labs_remote_path="/home/crc/final.mp4"
+static_path="/home/crc-admin/crc-server/static/"
 
 @app.errorhandler(404)
 def resource_not_found(e):
@@ -596,21 +598,29 @@ def api_commlabs_execute():
     thread = threading.Thread(
         target=commlabs_execute, 
         args=( json_req['user_id'], json_req['exp_name'], float(json_req['tx_gain']), float(json_req['rx_gain']),
-               float(json_req['frequency']),float(json_req['sample_rate']),json_req['transmitter_node'],json_req['receiver_node']))        
+               float(json_req['frequency']),float(json_req['sample_rate']),json_req['transmitter_node'],
+               json_req['receiver_node'],json_req['modulation']))        
     thread.start()
-    return ''
+    return jsonify({'exp_id': json_req['user_id']})
     
-def commlabs_execute(user_id,exp_name,tx_gain,rx_gain,frequency,sample_rate,transmitter_node,receiver_node):
+def commlabs_execute(user_id,exp_name,tx_gain,rx_gain,frequency,sample_rate,transmitter_node,receiver_node,modulation):
+    #frequency=1242e6
+    call(["rm", "-rf", "{}{}.*".format(static_path,user_id)])
     call(["rm", "-rf", "{}{}.*".format(commlabs_data_path,user_id)])
     call(["touch", "{}{}.lock".format(commlabs_data_path,user_id)])
-    log_file = open("{}{}.log".format(commlabs_data_path,user_id), "w+")     
-
-    p=Popen(["echo", "tx-gain {} rx-gain {} frequency {} sample_rate {} tx-node {} rx-node {}".format( tx_gain, rx_gain,frequency, sample_rate, transmitter_node,receiver_node)], stdout=log_file)
+    log_file = open("{}{}.log".format(commlabs_data_path,user_id), "w+")  
+    print "{}controller_script_{}".format(commlabs_files_path,exp_name)
+    p=Popen(["{}controller_script_{}".format(commlabs_files_path,exp_name), "-f", str(frequency), "-r",str(sample_rate),
+    "--tx-node",transmitter_node,"--rx-node",receiver_node,"--tx-gain",str(tx_gain),
+    "--rx-gain",str(rx_gain),"-m",modulation.lower()] , stdout=log_file)
+    
+    #p=Popen(["echo", "tx-gain {} rx-gain {} frequency {} sample_rate {} tx-node {} rx-node {}".format( tx_gain, rx_gain,frequency, sample_rate, transmitter_node,receiver_node)], stdout=log_file)
     with open("{}{}.pid".format(commlabs_data_path,user_id), "w") as pid_file:
         pid_file.write(format(p.pid))                
     p.wait()
 
     log_file.close()
+    time.sleep(10)
     call(["scp", "crc@{}:{}".format(receiver_node, comm_labs_remote_path), "{}{}.mp4".format(commlabs_results_path,user_id)])
     call(["rm", "-rf", "{}{}.lock".format(commlabs_data_path,user_id)])
     
